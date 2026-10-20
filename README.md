@@ -6,9 +6,9 @@ Proyecto del Taller de Tecnología Aplicada (implementación de Scrum con Jira).
 
 ## Enlaces
 
-- Repositorio: https://github.com/mateolujan13-dotcom/EcoDet
-- Tablero de Jira: `<completar>`
-- Documentos del producto: `<completar>`
+- Repositorio: https://github.com/CuyoDevs/EcoDet
+- Tablero de Jira: https://mateolujan13.atlassian.net/jira/software/projects/DET/boards/2
+- Documentos del producto: Ver documentación en el repositorio (Objetivo del producto, Product Backlog, Documentación de apoyo)
 
 ## Equipo
 
