@@ -21,8 +21,8 @@ Proyecto del Taller de Tecnología Aplicada (implementación de Scrum con Jira).
   - [Diagrama de Clases del Dominio](docs/diseno/diagramas/clases-dominio.md)
   - [Modelo de Datos Relacional](docs/diseno/diagramas/modelo-datos.md)
 - **Gestión del Sprint:**
-  - [Planificación y Sprint Backlog del Sprint 1](docs/sprints/sprint-1/planificacion.md)
-  - [Guía de Actividades del Sprint 1](docs/sprints/sprint-1/guia-actividades.md)
+  - [Planificación del Sprint 1 (Sprint Planning)](docs/sprints/sprint-1/planificacion.md)
+  - [Sprint Backlog del Sprint 1](docs/sprints/sprint-1/sprint-backlog.md)
 
 ---
 
