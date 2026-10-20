@@ -46,3 +46,20 @@
   - Fechas: `dd/mm/aaaa` (ej.: `20/10/2026`).
   - Decimales: coma `,` para interfaz de usuario en español (ej.: `3,2 kWh/día`).
   - Consumo: número formateado seguido de su unidad fija (`kWh` o `m³`).
+
+---
+
+## 4. Diseño Visual Generado con Google Stitch
+Se ha generado en Google Stitch el **Design System** y la pantalla principal de referencia para **Mis Inmuebles (W2)**:
+- **Proyecto Stitch:** `projects/4665985437669757744` (EcoDet)
+- **Asset Design System:** `assets/5219911056938694271` (EcoDet Design System)
+- **Captura de pantalla de referencia:** [Ver diseño renderizado en alta resolución](https://lh3.googleusercontent.com/aida/AEtjO1UQV5H53myos0WDQetJ-nlAKWMbRtsZ-crciIX3Gbttl7uK-VtEc1CBB8K5x3K_NAX9bXTYkpfQuSyXN4wx0i5NjSbCcnvckTDjL1SN8qMx22bjmET0LMMK4vBUHB2l1K1V-hXQDXb5rd27cyZRM9kUG3ZGE6IS8PXSf2jVwPO-_fsqGZPIqHweYI3vnOMn5ZLrXNCZUTTR1MG4pVZigw-VjzJR3Mcwo14GPQmuXMT4sJO2n8-gd8W99g)
+
+### Características del diseño en Stitch:
+- **Fondo:** `#F8FAFC` (Slate-50) limpio y aireado.
+- **Tarjetas:** Superficie blanca `#FFFFFF` con radio `ROUND_EIGHT` (`rounded-xl` en Tailwind) y sombra `shadow-sm`.
+- **Servicios:**
+  - 💡 **Luz:** `#F59E0B` (Amber) con icono de rayo y unidad fija `kWh`.
+  - 🔥 **Gas:** `#3B82F6` (Blue) con icono de llama y unidad fija `m³`.
+  - 💧 **Agua:** `#06B6D4` (Cyan) con icono de gota y unidad fija `m³`.
+- **Alertas:** Badges con punto indicador (`2 alertas pendientes` en ámbar suave, `Sin alertas` en verde suave, y advertencias prioritarias en coral/rojo).
