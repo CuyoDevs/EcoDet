@@ -33,6 +33,9 @@ Proyecto del Taller de Tecnología Aplicada (implementación de Scrum con Jira).
 | **Product Owner** | Mateo |
 | **Scrum Master** | Ari |
 | **Equipo de desarrollo** | Josue, Gimena, Ari, Angel, William, Lisandro y Mateo |
+- Repositorio: https://github.com/CuyoDevs/EcoDet
+- Tablero de Jira: https://mateolujan13.atlassian.net/jira/software/projects/DET/boards/2
+- Documentos del producto: Ver documentación en el repositorio (Objetivo del producto, Product Backlog, Documentación de apoyo)
 
 ---
 
