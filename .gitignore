@@ -53,3 +53,6 @@ logs/
 *.log
 tmp/
 temp/
+
+# Entregables generados fuera del repo
+*.zip
