@@ -1,0 +1,5 @@
+{
+  "minimo_de_lecturas": 6,
+  "umbral_inicial_en_desvios": 2.0,
+  "piso_del_desvio_porcentaje_del_promedio": 10.0
+}
