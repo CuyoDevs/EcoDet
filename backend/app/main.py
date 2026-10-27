@@ -1,9 +1,12 @@
-from fastapi import FastAPI, Depends, status
+from fastapi import FastAPI, Depends, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .database import engine, Base, get_db
 from .config import settings, detector_config
+from .routers import auth
 
 # Crear tablas en SQLite automáticamente al iniciar
 Base.metadata.create_all(bind=engine)
@@ -24,6 +27,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+app.include_router(auth.router)
+
+_MENSAJES_422 = {
+    "missing": "Este campo es obligatorio.",
+    "string_type": "Debe ser un texto.",
+    "json_invalid": "El cuerpo del pedido no es un JSON válido.",
+}
+
+
+@app.exception_handler(RequestValidationError)
+async def manejar_errores_de_validacion(request: Request, exc: RequestValidationError):
+    """422 con mensajes en español. Mantiene `detail` (formato estándar de FastAPI) y agrega
+    `errores`: {campo: mensaje}, para que el frontend los muestre debajo de cada campo."""
+    detalle, errores = [], {}
+    for err in exc.errors():
+        loc = [str(p) for p in err.get("loc", ())]
+        mensaje = _MENSAJES_422.get(err["type"]) or err["msg"].removeprefix("Value error, ")
+        detalle.append({"loc": loc, "msg": mensaje, "type": err["type"]})
+        campo = loc[-1] if len(loc) > 1 and loc[0] == "body" else None
+        if campo and not campo.isdigit():
+            errores.setdefault(campo, mensaje)
+    return JSONResponse(status_code=422, content={"detail": detalle, "errores": errores})
 
 
 @app.get("/", tags=["General"])

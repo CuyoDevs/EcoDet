@@ -4,6 +4,9 @@ from pathlib import Path
 from pydantic_settings import BaseSettings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Clave por defecto SOLO para desarrollo local. Fuera de "development" no se acepta (ver security.py).
+SECRET_KEY_DE_DESARROLLO = "dev_secret_key_ecodet_2026_scrum"
 CONFIG_JSON_PATH = BASE_DIR / "config.json"
 
 
@@ -23,7 +26,7 @@ class SystemDetectorSettings:
 class AppSettings(BaseSettings):
     ENVIRONMENT: str = "development"
     DATABASE_URL: str = "sqlite:///./ecodet.db"
-    SECRET_KEY: str = "dev_secret_key_ecodet_2026_scrum"
+    SECRET_KEY: str = SECRET_KEY_DE_DESARROLLO
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
