@@ -56,6 +56,35 @@ class RegistroIn(BaseModel):
         return validar_contrasena(v)
 
 
+class LoginIn(BaseModel):
+    """HU-03 / CU-02 · Iniciar sesión (DET-37).
+
+    Solo exige que los campos no vengan vacíos. A propósito NO aplica las reglas de RN-15 ni el
+    formato del correo: un dato mal formado simplemente no coincide con ninguna cuenta y recibe el
+    mismo error genérico que cualquier credencial incorrecta, sin revelar qué falló ni cómo es la
+    política de contraseñas.
+    """
+
+    correo: str
+    contrasena: str
+
+    @field_validator("correo")
+    @classmethod
+    def _correo(cls, v: str) -> str:
+        # Misma normalización que en el registro: "Ana@x.com" y "ana@x.com" son la misma cuenta.
+        v = v.strip().lower()
+        if not v:
+            raise ValueError("Ingresa tu correo.")
+        return v
+
+    @field_validator("contrasena")
+    @classmethod
+    def _contrasena(cls, v: str) -> str:
+        if not v:
+            raise ValueError("Ingresa tu contraseña.")
+        return v
+
+
 class UsuarioOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
