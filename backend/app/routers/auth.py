@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..dependencies import get_current_user
 from ..models import Usuario
 from ..schemas import CONTRASENA_MAX_BYTES, LoginIn, RegistroIn, TokenOut, UsuarioOut
 from ..security import crear_token_acceso, hashear_contrasena, verificar_contrasena
@@ -75,3 +76,16 @@ def iniciar_sesion(datos: LoginIn, db: Session = Depends(get_db)):
         access_token=crear_token_acceso(usuario.id),
         usuario=UsuarioOut.model_validate(usuario),
     )
+
+
+
+@router.get(
+    "/me",
+    response_model=UsuarioOut,
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Falta el token, es inválido o venció."}},
+)
+def usuario_actual(usuario: Usuario = Depends(get_current_user)):
+    """Devuelve los datos de la cuenta con la sesión activa (id, nombre y correo).
+    El frontend lo usa para confirmar que el token guardado sigue siendo válido.
+    """
+    return usuario
