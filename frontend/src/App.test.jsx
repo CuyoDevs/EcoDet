@@ -17,7 +17,8 @@ describe('Flujo completo de HU-02', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    // W1 con pestaña "Registrarse" activa
+    // W1 abre en "Iniciar sesión"; se pasa a la pestaña "Registrarse"
+    await user.click(screen.getByRole('tab', { name: 'Registrarse' }))
     expect(screen.getByRole('tab', { name: 'Registrarse' })).toHaveAttribute('aria-selected', 'true')
 
     await user.type(screen.getByLabelText('Nombre'), 'Laura Pérez')
@@ -43,11 +44,13 @@ describe('Flujo completo de HU-02', () => {
     expect(screen.getByRole('heading', { name: 'Mis inmuebles' })).toBeInTheDocument()
   })
 
-  it('la pestaña "Iniciar sesión" está disponible para DET-39', async () => {
+  it('abre en "Iniciar sesión" y permite pasar a "Registrarse"', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByRole('tab', { name: 'Iniciar sesión' }))
     expect(screen.getByRole('tab', { name: 'Iniciar sesión' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByLabelText('Nombre')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Registrarse' }))
+    expect(screen.getByLabelText('Nombre')).toBeInTheDocument()
   })
 })
