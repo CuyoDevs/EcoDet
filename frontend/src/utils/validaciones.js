@@ -33,3 +33,13 @@ export function validarRegistro({ nombre, correo, contrasena }) {
   for (const [campo, mensaje] of Object.entries(e)) if (mensaje) errores[campo] = mensaje
   return errores
 }
+
+// Login (CU-02): solo se exige que los campos no estén vacíos. A propósito NO se valida el formato del
+// correo ni las reglas de contraseña: así el login no revela la política de contraseñas y cualquier dato
+// incorrecto recibe el mismo error genérico del servidor (ver LoginIn en backend/app/schemas.py).
+export function validarLogin({ correo, contrasena }) {
+  const errores = {}
+  if (!correo.trim()) errores.correo = 'Ingresa tu correo.'
+  if (!contrasena) errores.contrasena = 'Ingresa tu contraseña.'
+  return errores
+}

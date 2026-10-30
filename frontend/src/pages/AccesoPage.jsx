@@ -1,25 +1,16 @@
 import React, { useState } from 'react'
 import { Activity } from 'lucide-react'
+import LoginForm from '../components/LoginForm'
 import RegistroForm from '../components/RegistroForm'
 
 // Vista W1 (acceso): UNA sola vista con dos pestañas [Iniciar sesión] [Registrarse].
-// DET-33 (este archivo) crea el contenedor y la pestaña de registro.
-// DET-39 agrega el formulario de login: crear components/LoginForm.jsx y reemplazar
-// <LoginPendiente /> por <LoginForm /> más abajo. Después, cambiar pestanaInicial a 'login'.
+// Abre en "Iniciar sesión", que es lo que espera quien vuelve a la aplicación.
 const PESTANAS = [
   { id: 'login', etiqueta: 'Iniciar sesión' },
   { id: 'registro', etiqueta: 'Registrarse' }
 ]
 
-function LoginPendiente() {
-  return (
-    <p className="rounded-lg bg-slate-50 px-3 py-4 text-sm text-slate-500">
-      El inicio de sesión se agrega en DET-39 (HU-03).
-    </p>
-  )
-}
-
-export default function AccesoPage({ pestanaInicial = 'registro' }) {
+export default function AccesoPage({ pestanaInicial = 'login' }) {
   const [pestana, setPestana] = useState(pestanaInicial)
 
   return (
@@ -55,7 +46,7 @@ export default function AccesoPage({ pestanaInicial = 'registro' }) {
         </div>
 
         <div role="tabpanel" id={`panel-${pestana}`} aria-labelledby={`tab-${pestana}`}>
-          {pestana === 'registro' ? <RegistroForm onIrALogin={() => setPestana('login')} /> : <LoginPendiente />}
+          {pestana === 'registro' ? <RegistroForm onIrALogin={() => setPestana('login')} /> : <LoginForm />}
         </div>
       </main>
     </div>
