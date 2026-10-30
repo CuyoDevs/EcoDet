@@ -1,19 +1,12 @@
 import React from 'react'
-import { AuthProvider, useAuth } from './auth/AuthContext'
-import AccesoPage from './pages/AccesoPage'
-import PanelInmuebles from './pages/PanelInmuebles'
+import { AuthProvider } from './auth/AuthContext'
+import Rutas from './routes/Rutas'
 
-// Navegación mínima: con sesión se ve el panel, sin sesión la vista de acceso (W1).
-// DET-40 la reemplaza por rutas públicas y privadas con redirección.
-function Raiz() {
-  const { estaAutenticado } = useAuth()
-  return estaAutenticado ? <PanelInmuebles /> : <AccesoPage />
-}
-
+// La sesión (useAuth) y las rutas públicas y privadas con redirección (routes/Rutas.jsx, DET-40).
 export default function App() {
   return (
     <AuthProvider>
-      <Raiz />
+      <Rutas />
     </AuthProvider>
   )
 }

@@ -10,3 +10,8 @@ export function registrar({ nombre, correo, contrasena }) {
 export function iniciarSesion({ correo, contrasena }) {
   return apiFetch('/api/auth/login', { method: 'POST', body: { correo, contrasena } })
 }
+
+// GET /api/auth/me -> { id, nombre, correo } del dueño del token. 401 si falta, es inválido o venció.
+export function obtenerUsuarioActual() {
+  return apiFetch('/api/auth/me')
+}

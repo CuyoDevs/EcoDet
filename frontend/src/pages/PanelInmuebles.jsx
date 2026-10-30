@@ -3,9 +3,9 @@ import { LogOut } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import PanelVacio from '../components/PanelVacio'
 
-// PROVISORIO. El panel "Mis inmuebles" (W2) real, con rutas privadas, lo arma DET-40 y el botón
-// "Cerrar sesión" definitivo es de DET-43. Se deja este esqueleto para que, tras registrarse,
-// el usuario vea el panel vacío (HU-02, criterio 1) y pueda salir para probar de nuevo.
+// PROVISORIO. Es privado: routes/Rutas.jsx (DET-40) solo lo muestra con sesión. El listado real de
+// inmuebles (W2) llega con HU-05 y el botón "Cerrar sesión" definitivo es de DET-43. Mientras tanto,
+// quien entra o se registra ve el panel vacío (HU-02, criterio 1) y puede salir para probar de nuevo.
 export default function PanelInmuebles() {
   const { usuario, logout } = useAuth()
   const inmuebles = [] // HU-05 los trae de la API; la cuenta nueva no tiene ninguno (RN-01).
