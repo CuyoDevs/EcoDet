@@ -33,7 +33,6 @@ def crear_inmueble(
     """
     Crea un nuevo inmueble asociado al usuario autenticado.
     """
-    # 1. Verificar que el usuario no tenga ya un inmueble con ese mismo nombre
     existente = db.query(Inmueble).filter(
         Inmueble.usuario_id == usuario.id,
         Inmueble.nombre == inmueble_in.nombre
@@ -45,7 +44,6 @@ def crear_inmueble(
             content={"errores": {"nombre": "Ya tienes un inmueble con este nombre."}}
         )
 
-    # 2. Crear y guardar el nuevo inmueble
     nuevo_inmueble = Inmueble(
         usuario_id=usuario.id,
         nombre=inmueble_in.nombre,
@@ -59,4 +57,43 @@ def crear_inmueble(
     return nuevo_inmueble
 
 
+@router.put("/{inmueble_id}", response_model=InmuebleOut)
+def actualizar_inmueble(
+    inmueble_id: int,
+    inmueble_in: InmuebleIn,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Actualiza los datos de un inmueble existente perteneciente al usuario autenticado.
+    """
+    inmueble = db.query(Inmueble).filter(
+        Inmueble.id == inmueble_id,
+        Inmueble.usuario_id == usuario.id
+    ).first()
 
+    if not inmueble:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"errores": {"general": "Inmueble no encontrado."}}
+        )
+
+    existente = db.query(Inmueble).filter(
+        Inmueble.usuario_id == usuario.id,
+        Inmueble.nombre == inmueble_in.nombre,
+        Inmueble.id != inmueble_id
+    ).first()
+
+    if existente:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"errores": {"nombre": "Ya tienes otro inmueble con este nombre."}}
+        )
+
+    inmueble.nombre = inmueble_in.nombre
+    inmueble.direccion = inmueble_in.direccion
+
+    db.commit()
+    db.refresh(inmueble)
+
+    return inmueble
