@@ -20,8 +20,22 @@
 | :-: | :--- | :--- | :-: | :-: |
 | A | **Rutas públicas y privadas (DET-40).** Sin sesión no se entra al panel; con sesión no se vuelve al formulario. | 1. Sin sesión, escribir en la barra `http://localhost:5173/#/inmuebles` → se vuelve a `#/acceso` sin ver el panel.<br>2. Iniciar sesión y escribir `http://localhost:5173/#/acceso` → se vuelve al panel.<br>3. Cerrar sesión desde el panel → vuelve al acceso; con el botón **Atrás** del navegador no se vuelve al panel. | `Rutas.test.jsx` | ☐ |
 | B | **Token vencido o alterado.** Una sesión guardada que ya no vale no deja ver el panel. | 1. Iniciar sesión.<br>2. Herramientas del navegador → Aplicación → Almacenamiento local → cambiar una letra del valor de `ecodet.token`.<br>3. Recargar (F5): se ve un instante "Verificando tu sesión…" y se llega al acceso, con el token ya borrado. | `Rutas.test.jsx`, `test_token_con_firma_adulterada…`, `test_token_vencido…` | ☐ |
-| C | **Sin conexión.** Una caída de red no expulsa a nadie. | 1. Iniciar sesión.<br>2. Detener el backend y recargar: se sigue viendo el panel.<br>3. Con el backend detenido, intentar iniciar sesión desde cero: aviso de que no se pudo conectar con el servidor (no el de credenciales). | `Rutas.test.jsx`, `LoginForm.test.jsx` | ☐ |
+| C | **Servidor caído.** Una caída del backend no expulsa a nadie ni se confunde con credenciales incorrectas. | 1. Iniciar sesión.<br>2. Detener el backend y recargar (F5): se sigue viendo el panel.<br>3. Con el backend detenido, cerrar sesión e intentar iniciar sesión: aviso **Ocurrió un error inesperado (500). Inténtalo de nuevo.** (en desarrollo, el proxy de Vite responde 500 si el backend está apagado). Nunca debe verse el aviso de credenciales ni el panel.<br>4. Volver a levantar el backend: el login funciona sin recargar nada más. | `Rutas.test.jsx`, `LoginForm.test.jsx` | ☐ |
 | D | **Aislamiento (RN-01).** Una cuenta no ve rastros de otra. | 1. Entrar como Laura, cerrar sesión, entrar como Carlos.<br>2. Verificar que el panel muestra a Carlos y que el formulario no recuerda a Laura. | `test_cada_cuenta_entra…`, `App.test.jsx` | ☐ |
+
+## Registro de ejecución
+
+> Lo completa quien hace QA al terminar. Marcar cada resultado con ☑ (pasa) o ☒ (falla); si falla, anotar en **Observaciones** el paso, lo que se esperaba y lo que pasó.
+
+| Dato | Valor |
+| :--- | :--- |
+| Quién probó (no escribió el código de HU-03) | |
+| Fecha | |
+| Versión probada (`git rev-parse --short HEAD` en `main`) | |
+| Navegador y sistema operativo | |
+| `python -m pytest backend/tests/` (desde la raíz) | ☐ pasa — ___ pruebas |
+| `npm test` (en `frontend`) | ☐ pasa — ___ pruebas |
+| `npm run build` (en `frontend`) | ☐ compila |
 
 ## Definition of Done del equipo
 
