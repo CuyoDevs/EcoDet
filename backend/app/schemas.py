@@ -5,6 +5,9 @@ estos datos las aplique igual. Los mensajes van en español porque se muestran
 tal cual en el formulario del frontend.
 """
 import re
+from datetime import date
+from pydantic import BaseModel, ConfigDict, field_validator
+from .models import ServicioEnum
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -119,3 +122,46 @@ class InmuebleOut(BaseModel):
     nombre: str
     direccion: str | None = None
 
+
+
+""" Esquemas Pydantic para la carga de lecturas de consumo (DET-54).
+    Valida que el servicio sea correcto, que las fechas tengan lógica temporal
+    (sin fechas futuras ni de fin anteriores al inicio) y que el consumo
+    sea un número mayor o igual a cero (RN-02, RN-05, RN-03).
+"""
+
+
+class LecturaIn(BaseModel):
+    servicio: ServicioEnum
+    fecha_inicio: date
+    fecha_fin: date
+    consumo: float
+
+    @field_validator("consumo")
+    @classmethod
+    def _consumo(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("El consumo no puede ser negativo.")
+        return v
+
+    @field_validator("fecha_fin")
+    @classmethod
+    def _fechas(cls, v: date, info) -> date:
+        # Pydantic v2 permite validar contra otros campos usando info.data
+        fecha_inicio = info.data.get("fecha_inicio")
+        if fecha_inicio and v < fecha_inicio:
+            raise ValueError("La fecha de fin no puede ser anterior a la de inicio.")
+        if v > date.today():
+            raise ValueError("La fecha de fin no puede ser posterior a hoy.")
+        return v
+
+class LecturaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    inmueble_id: int
+    servicio: ServicioEnum
+    fecha_inicio: date
+    fecha_fin: date
+    consumo: float
+    

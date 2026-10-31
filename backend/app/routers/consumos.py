@@ -1,0 +1,65 @@
+""" Endpoint para la carga y registro de lecturas de consumo (DET-54).
+    Permite registrar un nuevo consumo asociado a un inmueble validando
+    las reglas del negocio (superposición de fechas, pertenencia del inmueble).
+"""
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..models import Lectura, Inmueble, Usuario
+from ..schemas import LecturaIn, LecturaOut
+from ..dependencies import get_current_user
+
+router = APIRouter(prefix="/api/consumos", tags=["consumos"])
+
+@router.post("/", response_model=LecturaOut, status_code=status.HTTP_201_CREATED)
+def crear_lectura(
+    inmueble_id: int,
+    lectura_in: LecturaIn,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Registra una nueva lectura de consumo para un inmueble del usuario autenticado (DET-54).
+    """
+    # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado
+    inmueble = db.query(Inmueble).filter(
+        Inmueble.id == inmueble_id,
+        Inmueble.usuario_id == usuario.id
+    ).first()
+
+    if not inmueble:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"error": "El inmueble no existe o no pertenece al usuario."}
+        )
+
+    # 2. Validar superposición de períodos para el mismo servicio en el inmueble
+    superposicion = db.query(Lectura).filter(
+        Lectura.inmueble_id == inmueble_id,
+        Lectura.servicio == lectura_in.servicio,
+        Lectura.fecha_inicio <= lectura_in.fecha_fin,
+        Lectura.fecha_fin >= lectura_in.fecha_inicio
+    ).first()
+
+    if superposicion:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"error": "El período ingresado se superpone con otra lectura existente para este servicio."}
+        )
+
+    # 3. Crear y guardar la nueva lectura de consumo
+    nueva_lectura = Lectura(
+        inmueble_id=inmueble_id,
+        servicio=lectura_in.servicio,
+        fecha_inicio=lectura_in.fecha_inicio,
+        fecha_fin=lectura_in.fecha_fin,
+        consumo=lectura_in.consumo
+    )
+
+    db.add(nueva_lectura)
+    db.commit()
+    db.refresh(nueva_lectura)
+
+    return nueva_lectura
