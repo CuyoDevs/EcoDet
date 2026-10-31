@@ -97,3 +97,25 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     usuario: UsuarioOut
+    
+class InmuebleIn(BaseModel):
+    nombre: str
+    direccion: str | None = None
+
+    @field_validator("nombre")
+    @classmethod
+    def _nombre(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("El nombre no puede estar vacío.")
+        if len(v) > 100:
+            raise ValueError("El nombre no puede superar los 100 caracteres.")
+        return v
+
+class InmuebleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    usuario_id: int
+    nombre: str
+    direccion: str | None = None
+
