@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -6,9 +5,24 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Inmueble, Usuario
 from ..schemas import InmuebleIn, InmuebleOut
-from ..dependencies import get_current_user  # Asumiendo que el archivo de tu compañero se llama dependencies.py
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/api/inmuebles", tags=["inmuebles"])
+
+
+@router.get("/", response_model=list[InmuebleOut])
+def listar_inmuebles(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    """Devuelve solo los inmuebles del usuario autenticado (RN-01)."""
+    return (
+        db.query(Inmueble)
+        .filter(Inmueble.usuario_id == usuario.id)
+        .order_by(Inmueble.id)
+        .all()
+    )
+
 
 @router.post("/", response_model=InmuebleOut, status_code=status.HTTP_201_CREATED)
 def crear_inmueble(
