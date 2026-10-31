@@ -205,6 +205,19 @@ describe('LoginForm · otras respuestas del servidor', () => {
     expect(screen.getByText('sin sesión')).toBeInTheDocument()
   })
 
+  it('una falla que no viene de la API (error de programa) muestra un aviso general y no abre sesión', async () => {
+    iniciarSesion.mockRejectedValue(new Error('falla inesperada'))
+    const user = montar()
+    await completar(user)
+    await user.click(entrar())
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('Ocurrió un error inesperado. Inténtalo de nuevo.')
+    expect(alerta).not.toHaveTextContent(MENSAJE_CREDENCIALES_INCORRECTAS)
+    expect(screen.getByText('sin sesión')).toBeInTheDocument()
+    expect(entrar()).toBeEnabled()
+  })
+
   it('un error 500 muestra un mensaje general (no el de credenciales)', async () => {
     iniciarSesion.mockRejectedValue(new ApiError(500, null))
     const user = montar()
