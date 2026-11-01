@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { crearLecturaConsumo } from '../api/consumos';
-import { listarInmuebles } from '../api/inmuebles';
+import { apiFetch } from '../api/client';
 
 export default function FormularioConsumo({ inmueblePreseleccionado }) {
   const [formData, setFormData] = useState({
@@ -16,18 +16,17 @@ export default function FormularioConsumo({ inmueblePreseleccionado }) {
   const [mensajeGlobal, setMensajeGlobal] = useState('');
   const [cargando, setCargando] = useState(false);
 
-  // Sincronizar si cambia el inmueble preseleccionado desde la tarjeta
   useEffect(() => {
     if (inmueblePreseleccionado) {
       setFormData((prev) => ({ ...prev, inmueble_id: inmueblePreseleccionado }));
     }
   }, [inmueblePreseleccionado]);
 
-  // Cargar los inmuebles del usuario al montar el componente
+  // Cargar los inmuebles usando apiFetch directamente
   useEffect(() => {
     const cargarInmuebles = async () => {
       try {
-        const data = await listarInmuebles();
+        const data = await apiFetch('/api/inmuebles/');
         setInmuebles(data);
         if (!inmueblePreseleccionado && data.length > 0) {
           setFormData((prev) => ({ ...prev, inmueble_id: data[0].id }));
