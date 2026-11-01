@@ -13,9 +13,8 @@ from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/api/consumos", tags=["consumos"])
 
-@router.post("/", response_model=LecturaOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LecturaOut, status_code=status.HTTP_201_CREATED)
 def crear_lectura(
-    inmueble_id: int,
     lectura_in: LecturaIn,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user)
@@ -25,19 +24,19 @@ def crear_lectura(
     """
     # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado
     inmueble = db.query(Inmueble).filter(
-        Inmueble.id == inmueble_id,
+        Inmueble.id == lectura_in.inmueble_id,
         Inmueble.usuario_id == usuario.id
     ).first()
 
     if not inmueble:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={"error": "El inmueble no existe o no pertenece al usuario."}
+            content={"errores": {"inmueble_id": "El inmueble no existe o no pertenece al usuario."}}
         )
 
     # 2. Validar superposición de períodos para el mismo servicio en el inmueble
     superposicion = db.query(Lectura).filter(
-        Lectura.inmueble_id == inmueble_id,
+        Lectura.inmueble_id == lectura_in.inmueble_id,
         Lectura.servicio == lectura_in.servicio,
         Lectura.fecha_inicio <= lectura_in.fecha_fin,
         Lectura.fecha_fin >= lectura_in.fecha_inicio
@@ -45,13 +44,13 @@ def crear_lectura(
 
     if superposicion:
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"error": "El período ingresado se superpone con otra lectura existente para este servicio."}
+            status_code=status.HTTP_409_CONFLICT,
+            content={"errores": {"fecha_inicio": "El período ingresado se superpone con otra lectura existente para este servicio."}}
         )
 
     # 3. Crear y guardar la nueva lectura de consumo
     nueva_lectura = Lectura(
-        inmueble_id=inmueble_id,
+        inmueble_id=lectura_in.inmueble_id,
         servicio=lectura_in.servicio,
         fecha_inicio=lectura_in.fecha_inicio,
         fecha_fin=lectura_in.fecha_fin,

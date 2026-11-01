@@ -132,6 +132,7 @@ class InmuebleOut(BaseModel):
 
 
 class LecturaIn(BaseModel):
+    inmueble_id: int
     servicio: ServicioEnum
     fecha_inicio: date
     fecha_fin: date
@@ -144,9 +145,16 @@ class LecturaIn(BaseModel):
             raise ValueError("El consumo no puede ser negativo.")
         return v
 
+    @field_validator("fecha_inicio")
+    @classmethod
+    def _fecha_inicio(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError("La fecha de inicio no puede ser posterior a hoy.")
+        return v
+
     @field_validator("fecha_fin")
     @classmethod
-    def _fechas(cls, v: date, info) -> date:
+    def _fecha_fin(cls, v: date, info) -> date:
         # Pydantic v2 permite validar contra otros campos usando info.data
         fecha_inicio = info.data.get("fecha_inicio")
         if fecha_inicio and v < fecha_inicio:
@@ -154,6 +162,7 @@ class LecturaIn(BaseModel):
         if v > date.today():
             raise ValueError("La fecha de fin no puede ser posterior a hoy.")
         return v
+
 
 class LecturaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -164,4 +173,3 @@ class LecturaOut(BaseModel):
     fecha_inicio: date
     fecha_fin: date
     consumo: float
-    

@@ -1,18 +1,9 @@
 "DET-55 Desarrollar formulario de lectura de consumo en la interfaz"
-export const crearLecturaConsumo = async (datosConsumo, token) => {
-  const response = await fetch('/api/consumos', {
+import { apiFetch } from './client';
+
+export const crearLecturaConsumo = async (datosConsumo) => {
+  return await apiFetch('/consumos', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify(datosConsumo)
+    body: datosConsumo,
   });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || 'Error al registrar la lectura de consumo');
-  }
-
-  return await response.json();
 };
