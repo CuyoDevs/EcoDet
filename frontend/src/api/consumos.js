@@ -1,3 +1,4 @@
+"DET-55 Desarrollar formulario de lectura de consumo en la interfaz"
 export const crearLecturaConsumo = async (datosConsumo, token) => {
   const response = await fetch('/api/consumos', {
     method: 'POST',

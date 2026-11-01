@@ -1,8 +1,8 @@
+"DET-55 Desarrollar formulario de lectura de consumo en la interfaz"
 import React from 'react'
 import { AlertCircle } from 'lucide-react'
 
-// Campo con etiqueta y error DEBAJO del input (guía de estilo: error = red-600, con ícono y texto).
-// Reutilizable por el login (DET-39) y por los formularios de inmuebles y lecturas.
+
 export default function CampoFormulario({ id, etiqueta, ayuda, error, className = '', ...inputProps }) {
   const idAyuda = ayuda ? `${id}-ayuda` : null
   const idError = error ? `${id}-error` : null
