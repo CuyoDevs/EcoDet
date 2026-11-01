@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react'
-import { LogOut, Plus } from 'lucide-react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { LogOut, Pencil, Plus } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import PanelVacio from '../components/PanelVacio'
 import CampoFormulario from '../components/CampoFormulario'
-import { listarInmuebles, crearInmueble } from '../api/inmuebles'
+import EditarInmuebleModal from '../components/EditarInmuebleModal'
+import { listarInmuebles, crearInmueble, actualizarInmueble } from '../api/inmuebles'
 
 export const MENSAJE_NOMBRE_VACIO = 'Ingresa un nombre para el inmueble.'
 
-// Panel "Mis inmuebles" (W2): lista los inmuebles del usuario y permite crear uno nuevo (HU-05).
+// Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05) y editarlo (HU-06).
 // El botón "Cerrar sesión" definitivo es de DET-43.
 export default function PanelInmuebles() {
   const { usuario, logout } = useAuth()
@@ -17,6 +18,9 @@ export default function PanelInmuebles() {
   const [mostrandoFormulario, setMostrandoFormulario] = useState(false)
   const [errores, setErrores] = useState({}) // { campo: mensaje } debajo de cada campo
   const [enviando, setEnviando] = useState(false)
+  const [editando, setEditando] = useState(null) // inmueble que se está editando (HU-06)
+  const [erroresEdicion, setErroresEdicion] = useState({})
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
 
   // La lista viene de la API: sobrevive a recargar la página (HU-05, criterio 1).
   useEffect(() => {
@@ -34,6 +38,47 @@ export default function PanelInmuebles() {
     setErrores({})
     setErrorGeneral('')
     setMostrandoFormulario((abierto) => !abierto)
+  }
+
+  const abrirEdicion = (inmueble) => {
+    setMostrandoFormulario(false)
+    setErrores({})
+    setErrorGeneral('')
+    setErroresEdicion({})
+    setEditando(inmueble)
+  }
+
+  const cerrarEdicion = useCallback(() => {
+    setEditando(null)
+    setErroresEdicion({})
+  }, [])
+
+  const manejarEdicion = async (e) => {
+    e.preventDefault()
+    setErroresEdicion({})
+
+    const formData = new FormData(e.target)
+    const nombre = (formData.get('nombre') ?? '').trim()
+    const direccion = (formData.get('direccion') ?? '').trim()
+
+    // Mismas validaciones que el alta: un nombre vacío no llega a la API.
+    if (!nombre) {
+      setErroresEdicion({ nombre: MENSAJE_NOMBRE_VACIO })
+      return
+    }
+
+    setGuardandoEdicion(true)
+    try {
+      const actualizado = await actualizarInmueble(editando.id, { nombre, direccion })
+      setInmuebles((actuales) => actuales.map((inm) => (inm.id === actualizado.id ? actualizado : inm)))
+      setEditando(null)
+    } catch (err) {
+      // 409 / 422 / 404 traen { errores: { campo: mensaje } }; el resto (sin conexión, 500) va como aviso general.
+      if (err.errores && Object.keys(err.errores).length > 0) setErroresEdicion(err.errores)
+      else setErroresEdicion({ general: err.message })
+    } finally {
+      setGuardandoEdicion(false)
+    }
   }
 
   const manejarEnvio = async (e) => {
@@ -158,13 +203,36 @@ export default function PanelInmuebles() {
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {inmuebles.map((inm) => (
               <li key={inm.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="font-semibold text-slate-900">{inm.nombre}</h3>
-                <p className="text-sm text-slate-500">{inm.direccion || 'Sin dirección registrada'}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold text-slate-900">{inm.nombre}</h3>
+                    <p className="text-sm text-slate-500">{inm.direccion || 'Sin dirección registrada'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => abrirEdicion(inm)}
+                    aria-label={`Editar ${inm.nombre}`}
+                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </main>
+
+      {editando && (
+        <EditarInmuebleModal
+          key={editando.id}
+          inmueble={editando}
+          errores={erroresEdicion}
+          enviando={guardandoEdicion}
+          onSubmit={manejarEdicion}
+          onCancelar={cerrarEdicion}
+        />
+      )}
     </div>
   )
 }
