@@ -106,7 +106,14 @@ uvicorn app.main:app --reload --port 8000
 - **Swagger UI interactivo:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **Endpoint de salud y base de datos:** [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
 
-### 3. Levantar el Frontend (React + Vite)
+### 3. Cargar datos ficticios de prueba (Seed opcional)
+Para probar los gráficos, estadísticas y detección de anomalías sin cargar facturas manualmente:
+```bash
+python backend/seed.py
+```
+> Esto crea el usuario `demo@ecodet.com` con contraseña `Password123` y 3 inmuebles de ejemplo con lecturas históricas, alertas y estados del detector.
+
+### 4. Levantar el Frontend (React + Vite)
 En una segunda terminal:
 ```bash
 # Ir a la carpeta del frontend
@@ -120,10 +127,13 @@ npm run dev
 ```
 - **Aplicación web:** [http://localhost:5173](http://localhost:5173)
 
-### 4. Ejecutar Pruebas Automáticas
+### 5. Ejecutar Pruebas Automáticas
 ```bash
 # Pruebas del backend y detector
 python -m pytest backend/tests/
+
+# Pruebas del frontend
+npm --prefix frontend test
 ```
 
 ---
