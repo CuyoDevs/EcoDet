@@ -1,15 +1,16 @@
-"""Endpoint para la carga y registro de lecturas de consumo (HU-08 / DET-16).
-Permite registrar un nuevo consumo asociado a un inmueble validando
-las reglas de negocio (RN-02, RN-03, RN-04, RN-05, RN-14).
+"""Endpoint para la carga y registro de lecturas de consumo (HU-08 / DET-16 y HU-09 / DET-17).
+Permite registrar consumos individuales y en lote asociados a un inmueble validando
+las reglas de negocio (RN-02, RN-03, RN-04, RN-05, RN-07, RN-14).
 """
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Lectura, Inmueble, Usuario
-from ..schemas import LecturaIn, LecturaOut
+from ..models import Lectura, Inmueble, Usuario, ServicioEnum
+from ..schemas import LecturaIn, LecturaOut, CargaLoteIn, CargaLoteOut
 from ..dependencies import get_current_user
+from ..config import detector_config
 
 router = APIRouter(prefix="/api/consumos", tags=["consumos"])
 
@@ -63,3 +64,122 @@ def crear_lectura(
     db.refresh(nueva_lectura)
 
     return nueva_lectura
+
+
+@router.post("/lote", response_model=CargaLoteOut, status_code=status.HTTP_201_CREATED)
+def crear_lecturas_lote(
+    lote_in: CargaLoteIn,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Carga masiva histórica de lecturas de consumo bajo la regla 'todo o nada' (HU-09 / DET-17).
+    Si alguna fila es inválida o se superpone interna o externamente, ninguna se persiste.
+    """
+    # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado (RN-01)
+    inmueble = db.query(Inmueble).filter(
+        Inmueble.id == lote_in.inmueble_id,
+        Inmueble.usuario_id == usuario.id
+    ).first()
+
+    if not inmueble:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"errores": {"inmueble_id": "El inmueble no existe o no pertenece al usuario."}}
+        )
+
+    # 2. Validar superposición INTERNA entre las filas del lote
+    # Agrupamos por servicio
+    filas_por_servicio = {}
+    for idx, fila in enumerate(lote_in.lecturas):
+        srv = fila.servicio
+        if srv not in filas_por_servicio:
+            filas_por_servicio[srv] = []
+        filas_por_servicio[srv].append((idx, fila))
+
+    errores_filas = {}
+    for srv, lista in filas_por_servicio.items():
+        # Comparar pares en la lista
+        for i in range(len(lista)):
+            idx_a, fila_a = lista[i]
+            for j in range(i + 1, len(lista)):
+                idx_b, fila_b = lista[j]
+                if fila_a.fecha_inicio <= fila_b.fecha_fin and fila_a.fecha_fin >= fila_b.fecha_inicio:
+                    errores_filas[f"fila_{idx_b}"] = (
+                        f"La fila {idx_b + 1} se superpone con la fila {idx_a + 1} para el servicio {srv.value}."
+                    )
+
+    if errores_filas:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "mensaje": "El lote contiene períodos superpuestos internamente (todo o nada).",
+                "errores": errores_filas
+            }
+        )
+
+    # 3. Validar superposición EXTERNA contra lecturas ya guardadas en la base de datos
+    for idx, fila in enumerate(lote_in.lecturas):
+        superposicion = db.query(Lectura).filter(
+            Lectura.inmueble_id == lote_in.inmueble_id,
+            Lectura.servicio == fila.servicio,
+            Lectura.fecha_inicio <= fila.fecha_fin,
+            Lectura.fecha_fin >= fila.fecha_inicio
+        ).first()
+
+        if superposicion:
+            errores_filas[f"fila_{idx}"] = (
+                f"La fila {idx + 1} ({fila.servicio.value}: {fila.fecha_inicio} a {fila.fecha_fin}) "
+                f"se superpone con una lectura ya registrada en el historial."
+            )
+
+    if errores_filas:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "mensaje": "Una o más lecturas del lote se superponen con el historial existente (todo o nada).",
+                "errores": errores_filas
+            }
+        )
+
+    # 4. Transacción atómica Todo o Nada
+    nuevas_lecturas = []
+    try:
+        for fila in lote_in.lecturas:
+            nueva = Lectura(
+                inmueble_id=lote_in.inmueble_id,
+                servicio=fila.servicio,
+                fecha_inicio=fila.fecha_inicio,
+                fecha_fin=fila.fecha_fin,
+                consumo=fila.consumo
+            )
+            db.add(nueva)
+            nuevas_lecturas.append(nueva)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"mensaje": f"Error al persistir el lote: {str(e)}"}
+        )
+
+    # Refrescar instancias guardadas
+    for l in nuevas_lecturas:
+        db.refresh(l)
+
+    # 5. Calcular si el detector queda activo por servicio (RN-07: >= 6 lecturas en total)
+    minimo_lecturas = detector_config.minimo_de_lecturas
+    detector_activo = {}
+    for srv in [ServicioEnum.LUZ, ServicioEnum.GAS, ServicioEnum.AGUA]:
+        total_servicio = db.query(Lectura).filter(
+            Lectura.inmueble_id == lote_in.inmueble_id,
+            Lectura.servicio == srv
+        ).count()
+        detector_activo[srv.value] = total_servicio >= minimo_lecturas
+
+    return {
+        "inmueble_id": lote_in.inmueble_id,
+        "cantidad_cargadas": len(nuevas_lecturas),
+        "lecturas": nuevas_lecturas,
+        "detector_activo_por_servicio": detector_activo
+    }
