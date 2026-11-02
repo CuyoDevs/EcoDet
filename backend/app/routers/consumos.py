@@ -13,6 +13,19 @@ from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/api/consumos", tags=["consumos"])
 
+@router.get("", response_model=list[LecturaOut])
+def listar_lecturas(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Lista todas las lecturas de consumo asociadas a los inmuebles del usuario autenticado.
+    """
+    # Buscamos las lecturas cuyos inmuebles pertenezcan al usuario actual
+    lecturas = db.query(Lectura).join(Inmueble).filter(Inmueble.usuario_id == usuario.id).all()
+    return lecturas
+
+
 @router.post("", response_model=LecturaOut, status_code=status.HTTP_201_CREATED)
 def crear_lectura(
     lectura_in: LecturaIn,

@@ -12,6 +12,7 @@ export default function FormularioConsumo({ inmueblePreseleccionado }) {
   });
 
   const [inmuebles, setInmuebles] = useState([]);
+  const [listaLecturas, setListaLecturas] = useState([]);
   const [errores, setErrores] = useState({});
   const [mensajeGlobal, setMensajeGlobal] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -37,6 +38,19 @@ export default function FormularioConsumo({ inmueblePreseleccionado }) {
     };
     cargarInmuebles();
   }, [inmueblePreseleccionado]);
+
+  // Cargar el historial de consumos para mostrarlos en pantalla
+  useEffect(() => {
+    const cargarLecturas = async () => {
+      try {
+        const data = await apiFetch('/api/consumos');
+        setListaLecturas(data);
+      } catch (err) {
+        console.error("Error al cargar el historial de consumos");
+      }
+    };
+    cargarLecturas();
+  }, [mensajeGlobal]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -170,6 +184,27 @@ export default function FormularioConsumo({ inmueblePreseleccionado }) {
           {cargando ? 'Registrando...' : 'Registrar Consumo'}
         </button>
       </form>
+
+      {/* Sección para visualizar el historial de consumos registrados */}
+      <div className="mt-6 pt-4 border-t border-slate-200">
+        <h3 className="text-sm font-bold text-slate-700 mb-2">Historial de Consumos Registrados</h3>
+        {listaLecturas.length > 0 ? (
+          <ul className="space-y-2">
+            {listaLecturas.map((lec) => (
+              <li key={lec.id} className="bg-slate-50 p-2.5 rounded border text-xs text-slate-700 flex justify-between items-center">
+                <div>
+                  <span className="font-semibold text-teal-700">{lec.servicio}</span>: {lec.consumo} un.
+                </div>
+                <div className="text-slate-400">
+                  {lec.fecha_inicio} al {lec.fecha_fin}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-slate-400 italic">No hay consumos registrados todavía.</p>
+        )}
+      </div>
     </div>
   );
 }
