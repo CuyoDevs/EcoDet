@@ -1,4 +1,4 @@
-"""Endpoint para la carga y registro de lecturas de consumo (HU-08 / DET-16 y HU-09 / DET-17).
+﻿"""Endpoint para la carga y registro de lecturas de consumo (HU-08 / DET-16 y HU-09 / DET-17).
 Permite registrar consumos individuales y en lote asociados a un inmueble validando
 las reglas de negocio (RN-02, RN-03, RN-04, RN-05, RN-07, RN-14).
 """
@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Lectura, Inmueble, Usuario, ServicioEnum
-from ..schemas import LecturaIn, LecturaOut, CargaLoteIn, CargaLoteOut
+from ..schemas import (
+    LecturaIn, LecturaOut, CargaLoteIn, CargaLoteOut,
+    HistorialInmuebleOut, HistorialServicioOut, LecturaHistorialOut,
+    EstadisticasServicio,
+)
 from ..dependencies import get_current_user
 from ..config import detector_config
 
@@ -36,7 +40,7 @@ def crear_lectura(
             content={"errores": {"inmueble_id": "El inmueble no existe o no pertenece al usuario."}}
         )
 
-    # 2. Validar superposición de períodos para el mismo servicio en el inmueble (RN-14)
+    # 2. Validar superposiciÃ³n de perÃ­odos para el mismo servicio en el inmueble (RN-14)
     superposicion = db.query(Lectura).filter(
         Lectura.inmueble_id == lectura_in.inmueble_id,
         Lectura.servicio == lectura_in.servicio,
@@ -47,7 +51,7 @@ def crear_lectura(
     if superposicion:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"errores": {"fecha_inicio": "El período ingresado se superpone con otra lectura existente para este servicio."}}
+            content={"errores": {"fecha_inicio": "El perÃ­odo ingresado se superpone con otra lectura existente para este servicio."}}
         )
 
     # 3. Crear y guardar la nueva lectura de consumo
@@ -73,8 +77,8 @@ def crear_lecturas_lote(
     usuario: Usuario = Depends(get_current_user)
 ):
     """
-    Carga masiva histórica de lecturas de consumo bajo la regla 'todo o nada' (HU-09 / DET-17).
-    Si alguna fila es inválida o se superpone interna o externamente, ninguna se persiste.
+    Carga masiva histÃ³rica de lecturas de consumo bajo la regla 'todo o nada' (HU-09 / DET-17).
+    Si alguna fila es invÃ¡lida o se superpone interna o externamente, ninguna se persiste.
     """
     # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado (RN-01)
     inmueble = db.query(Inmueble).filter(
@@ -88,7 +92,7 @@ def crear_lecturas_lote(
             content={"errores": {"inmueble_id": "El inmueble no existe o no pertenece al usuario."}}
         )
 
-    # 2. Validar superposición INTERNA entre las filas del lote
+    # 2. Validar superposiciÃ³n INTERNA entre las filas del lote
     # Agrupamos por servicio
     filas_por_servicio = {}
     for idx, fila in enumerate(lote_in.lecturas):
@@ -113,12 +117,12 @@ def crear_lecturas_lote(
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={
-                "mensaje": "El lote contiene períodos superpuestos internamente (todo o nada).",
+                "mensaje": "El lote contiene perÃ­odos superpuestos internamente (todo o nada).",
                 "errores": errores_filas
             }
         )
 
-    # 3. Validar superposición EXTERNA contra lecturas ya guardadas en la base de datos
+    # 3. Validar superposiciÃ³n EXTERNA contra lecturas ya guardadas en la base de datos
     for idx, fila in enumerate(lote_in.lecturas):
         superposicion = db.query(Lectura).filter(
             Lectura.inmueble_id == lote_in.inmueble_id,
@@ -137,12 +141,12 @@ def crear_lecturas_lote(
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={
-                "mensaje": "Una o más lecturas del lote se superponen con el historial existente (todo o nada).",
+                "mensaje": "Una o mÃ¡s lecturas del lote se superponen con el historial existente (todo o nada).",
                 "errores": errores_filas
             }
         )
 
-    # 4. Transacción atómica Todo o Nada
+    # 4. TransacciÃ³n atÃ³mica Todo o Nada
     nuevas_lecturas = []
     try:
         for fila in lote_in.lecturas:
@@ -183,3 +187,88 @@ def crear_lecturas_lote(
         "lecturas": nuevas_lecturas,
         "detector_activo_por_servicio": detector_activo
     }
+
+
+def _calcular_estadisticas(lecturas_ord: list) -> dict | None:
+    """Calcula promedio, min, max y tendencia sobre una lista de lecturas ordenadas por fecha."""
+    if not lecturas_ord:
+        return None
+    consumos_dia = [l.consumo_por_dia for l in lecturas_ord]
+    promedio = sum(consumos_dia) / len(consumos_dia)
+    minimo = min(consumos_dia)
+    maximo = max(consumos_dia)
+    # Tendencia: comparar el consumo_por_dia del Ãºltimo perÃ­odo vs el anterior
+    if len(consumos_dia) >= 2:
+        diff = consumos_dia[-1] - consumos_dia[-2]
+        umbral = promedio * 0.05  # 5 % de tolerancia para "estable"
+        if diff > umbral:
+            tendencia = "sube"
+        elif diff < -umbral:
+            tendencia = "baja"
+        else:
+            tendencia = "estable"
+    else:
+        tendencia = "sin_datos"
+    return {"promedio": round(promedio, 4), "minimo": round(minimo, 4), "maximo": round(maximo, 4), "tendencia": tendencia}
+
+
+@router.get("/{inmueble_id}/historial", response_model=HistorialInmuebleOut, status_code=status.HTTP_200_OK)
+def obtener_historial(
+    inmueble_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Devuelve el historial de lecturas de un inmueble agrupado por servicio,
+    con estadisticas y estado del detector (HU-10 / DET-18).
+    """
+    # 1. Verificar pertenencia del inmueble (RN-01)
+    inmueble = db.query(Inmueble).filter(
+        Inmueble.id == inmueble_id,
+        Inmueble.usuario_id == usuario.id
+    ).first()
+
+    if not inmueble:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"errores": {"inmueble_id": "El inmueble no existe o no pertenece al usuario."}}
+        )
+
+    minimo_lecturas = detector_config.minimo_de_lecturas
+    resultado = {"inmueble_id": inmueble_id}
+
+    for srv in [ServicioEnum.LUZ, ServicioEnum.GAS, ServicioEnum.AGUA]:
+        # Lecturas ordenadas por fecha de inicio (RN-06: ordenadas por perÃ­odo)
+        lecturas_db = (
+            db.query(Lectura)
+            .filter(Lectura.inmueble_id == inmueble_id, Lectura.servicio == srv)
+            .order_by(Lectura.fecha_inicio)
+            .all()
+        )
+
+        detector_activo = len(lecturas_db) >= minimo_lecturas
+
+        lecturas_out = [
+            LecturaHistorialOut(
+                id=l.id,
+                servicio=l.servicio,
+                fecha_inicio=l.fecha_inicio,
+                fecha_fin=l.fecha_fin,
+                consumo=l.consumo,
+                consumo_por_dia=round(l.consumo_por_dia, 4),
+                tiene_alerta=l.alerta is not None,
+            )
+            for l in lecturas_db
+        ]
+
+        estadisticas_raw = _calcular_estadisticas(lecturas_db)
+        estadisticas = EstadisticasServicio(**estadisticas_raw) if estadisticas_raw else None
+
+        resultado[srv.value] = HistorialServicioOut(
+            detector_activo=detector_activo,
+            lecturas=lecturas_out,
+            estadisticas=estadisticas,
+        )
+
+    return resultado
+

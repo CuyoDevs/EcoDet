@@ -214,3 +214,41 @@ class CargaLoteOut(BaseModel):
     cantidad_cargadas: int
     lecturas: list[LecturaOut]
     detector_activo_por_servicio: dict[str, bool]
+
+
+# --- Esquemas para Historial y Gráficos (HU-10 / DET-18) ---
+
+class LecturaHistorialOut(BaseModel):
+    """Lectura enriquecida con consumo_por_dia y flag de alerta para el gráfico."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    servicio: ServicioEnum
+    fecha_inicio: date
+    fecha_fin: date
+    consumo: float
+    consumo_por_dia: float
+    tiene_alerta: bool
+
+
+class EstadisticasServicio(BaseModel):
+    """Estadísticas básicas de un servicio para el panel de historial."""
+    promedio: float
+    minimo: float
+    maximo: float
+    tendencia: str  # "sube", "baja", "estable", "sin_datos"
+
+
+class HistorialServicioOut(BaseModel):
+    """Historial completo de un servicio: lecturas ordenadas + estadísticas."""
+    detector_activo: bool
+    lecturas: list[LecturaHistorialOut]
+    estadisticas: EstadisticasServicio | None
+
+
+class HistorialInmuebleOut(BaseModel):
+    """Respuesta del GET /api/consumos/{inmueble_id}/historial (HU-10 / DET-18)."""
+    inmueble_id: int
+    LUZ: HistorialServicioOut
+    GAS: HistorialServicioOut
+    AGUA: HistorialServicioOut

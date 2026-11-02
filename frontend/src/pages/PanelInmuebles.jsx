@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { LogOut, Pencil, Plus, Zap } from 'lucide-react'
+import { BarChart2, LogOut, Pencil, Plus, Zap } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import PanelVacio from '../components/PanelVacio'
 import CampoFormulario from '../components/CampoFormulario'
 import EditarInmuebleModal from '../components/EditarInmuebleModal'
 import FormularioConsumo from '../components/FormularioConsumo'
+import HistorialConsumos from '../components/HistorialConsumos'
 import { listarInmuebles, crearInmueble, actualizarInmueble } from '../api/inmuebles'
 
 export const MENSAJE_NOMBRE_VACIO = 'Ingresa un nombre para el inmueble.'
 
-// Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05), editarlo (HU-06) y registrar consumo (HU-08).
+// Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05),
+// editarlo (HU-06), registrar consumo (HU-08) y ver el historial (HU-10).
 export default function PanelInmuebles() {
   const { usuario, logout } = useAuth()
   const [inmuebles, setInmuebles] = useState([])
@@ -17,6 +19,7 @@ export default function PanelInmuebles() {
   const [errorGeneral, setErrorGeneral] = useState('')
   const [mostrandoFormulario, setMostrandoFormulario] = useState(false)
   const [inmuebleParaConsumo, setInmuebleParaConsumo] = useState(null)
+  const [inmuebleParaHistorial, setInmuebleParaHistorial] = useState(null)
   const [errores, setErrores] = useState({}) // { campo: mensaje } debajo de cada campo
   const [enviando, setEnviando] = useState(false)
   const [editando, setEditando] = useState(null) // inmueble que se está editando (HU-06)
@@ -39,12 +42,14 @@ export default function PanelInmuebles() {
     setErrores({})
     setErrorGeneral('')
     setInmuebleParaConsumo(null)
+    setInmuebleParaHistorial(null)
     setMostrandoFormulario((abierto) => !abierto)
   }
 
   const abrirEdicion = (inmueble) => {
     setMostrandoFormulario(false)
     setInmuebleParaConsumo(null)
+    setInmuebleParaHistorial(null)
     setErrores({})
     setErrorGeneral('')
     setErroresEdicion({})
@@ -59,7 +64,15 @@ export default function PanelInmuebles() {
   const abrirConsumo = (inmuebleId) => {
     setMostrandoFormulario(false)
     setEditando(null)
+    setInmuebleParaHistorial(null)
     setInmuebleParaConsumo((actual) => (actual === inmuebleId ? null : inmuebleId))
+  }
+
+  const abrirHistorial = (inmuebleId) => {
+    setMostrandoFormulario(false)
+    setEditando(null)
+    setInmuebleParaConsumo(null)
+    setInmuebleParaHistorial((actual) => (actual === inmuebleId ? null : inmuebleId))
   }
 
   const manejarEdicion = async (e) => {
@@ -202,7 +215,7 @@ export default function PanelInmuebles() {
           </form>
         )}
 
-        {/* Sección de Formulario de Consumo para el inmueble seleccionado */}
+        {/* Formulario de Consumo para el inmueble seleccionado */}
         {inmuebleParaConsumo && (
           <div className="border border-teal-200 rounded-xl bg-teal-50/30 p-4">
             <FormularioConsumo
@@ -210,6 +223,20 @@ export default function PanelInmuebles() {
               inmuebles={inmuebles}
               onCancelar={() => setInmuebleParaConsumo(null)}
               onLecturaCreada={() => {}}
+            />
+          </div>
+        )}
+
+        {/* Historial de consumos para el inmueble seleccionado (HU-10) */}
+        {inmuebleParaHistorial && (
+          <div className="border border-indigo-200 rounded-xl bg-indigo-50/20 p-4">
+            <HistorialConsumos
+              inmuebleId={inmuebleParaHistorial}
+              onAbrirCarga={() => {
+                setInmuebleParaHistorial(null)
+                setInmuebleParaConsumo(inmuebleParaHistorial)
+              }}
+              onCerrar={() => setInmuebleParaHistorial(null)}
             />
           </div>
         )}
@@ -239,16 +266,27 @@ export default function PanelInmuebles() {
                   <p className="text-sm text-slate-500 mt-1">{inm.direccion || 'Sin dirección registrada'}</p>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-xs text-slate-400">ID: {inm.id}</span>
-                  <button
-                    type="button"
-                    onClick={() => abrirConsumo(inm.id)}
-                    className="inline-flex items-center gap-1.5 text-xs bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-md hover:bg-teal-100 font-medium transition"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-teal-600" />
-                    <span>{inmuebleParaConsumo === inm.id ? 'Ocultar consumo' : '+ Cargar consumo'}</span>
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => abrirHistorial(inm.id)}
+                      aria-label={`Ver historial de ${inm.nombre}`}
+                      className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-md hover:bg-indigo-100 font-medium transition"
+                    >
+                      <BarChart2 className="w-3.5 h-3.5" />
+                      <span>{inmuebleParaHistorial === inm.id ? 'Ocultar historial' : 'Ver historial'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => abrirConsumo(inm.id)}
+                      className="inline-flex items-center gap-1.5 text-xs bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-md hover:bg-teal-100 font-medium transition"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-teal-600" />
+                      <span>{inmuebleParaConsumo === inm.id ? 'Ocultar consumo' : '+ Cargar consumo'}</span>
+                    </button>
+                  </div>
                 </div>
               </li>
             ))}
