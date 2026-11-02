@@ -23,6 +23,9 @@ function simularApi(rutas) {
   return fetchMock
 }
 
+// El panel también pide GET /api/inmuebles/ (HU-05): estas pruebas cuentan solo las llamadas de autenticación.
+const llamadasDeAuth = (fetchMock) => fetchMock.mock.calls.filter(([url]) => url.startsWith('/api/auth/'))
+
 const guardarSesion = (usuario = LAURA) => {
   window.localStorage.setItem('ecodet.token', 'tok-guardado')
   window.localStorage.setItem('ecodet.usuario', JSON.stringify(usuario))
@@ -83,7 +86,10 @@ describe('Rutas privadas sin sesión', () => {
 describe('Sesión guardada al abrir o recargar la página', () => {
   it('con un token válido: muestra "Verificando…", confirma con /api/auth/me y entra al panel', async () => {
     guardarSesion()
-    const fetchMock = simularApi({ 'GET /api/auth/me': () => respuesta(200, LAURA) })
+    const fetchMock = simularApi({
+      'GET /api/auth/me': () => respuesta(200, LAURA),
+      'GET /api/inmuebles/': () => respuesta(200, [])
+    })
     window.location.hash = '#/acceso'
     render(<App />)
 
@@ -95,7 +101,7 @@ describe('Sesión guardada al abrir o recargar la página', () => {
     const [url, opciones] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/auth/me')
     expect(opciones.headers.Authorization).toBe('Bearer tok-guardado')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(llamadasDeAuth(fetchMock)).toHaveLength(1)
   })
 
   it('refresca los datos del usuario con los que devuelve el servidor', async () => {
@@ -154,7 +160,8 @@ describe('Sesión guardada al abrir o recargar la página', () => {
 describe('Iniciar y cerrar sesión desde la interfaz', () => {
   it('login correcto: llama a /api/auth/login con el cuerpo esperado, entra al panel y no vuelve a verificar', async () => {
     const fetchMock = simularApi({
-      'POST /api/auth/login': () => respuesta(200, { access_token: 'tok-nuevo', token_type: 'bearer', usuario: LAURA })
+      'POST /api/auth/login': () => respuesta(200, { access_token: 'tok-nuevo', token_type: 'bearer', usuario: LAURA }),
+      'GET /api/inmuebles/': () => respuesta(200, [])
     })
     const user = userEvent.setup()
     render(<App />)
@@ -172,7 +179,7 @@ describe('Iniciar y cerrar sesión desde la interfaz', () => {
     expect(opciones.method).toBe('POST')
     expect(JSON.parse(opciones.body)).toEqual({ correo: 'laura@correo.com', contrasena: 'Clave1234' })
     expect(opciones.headers.Authorization).toBeUndefined()
-    expect(fetchMock).toHaveBeenCalledTimes(1) // sin /me: el token recién emitido ya es válido
+    expect(llamadasDeAuth(fetchMock)).toHaveLength(1) // sin /me: el token recién emitido ya es válido
   })
 
   it('login incorrecto: mensaje genérico, sigue en el acceso y no queda nada guardado', async () => {

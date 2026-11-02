@@ -1,168 +1,271 @@
-import React, { useState, useEffect } from 'react'
-import { LogOut, Plus } from 'lucide-react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { LogOut, Pencil, Plus, Zap } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import PanelVacio from '../components/PanelVacio'
 import CampoFormulario from '../components/CampoFormulario'
+import EditarInmuebleModal from '../components/EditarInmuebleModal'
 import FormularioConsumo from '../components/FormularioConsumo'
-import { apiFetch } from '../api/client'
+import { listarInmuebles, crearInmueble, actualizarInmueble } from '../api/inmuebles'
 
+export const MENSAJE_NOMBRE_VACIO = 'Ingresa un nombre para el inmueble.'
+
+// Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05), editarlo (HU-06) y registrar consumo (HU-08).
 export default function PanelInmuebles() {
   const { usuario, logout } = useAuth()
   const [inmuebles, setInmuebles] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [errorGeneral, setErrorGeneral] = useState('')
   const [mostrandoFormulario, setMostrandoFormulario] = useState(false)
-  const [inmuebleSeleccionado, setInmuebleSeleccionado] = useState(null)
-  const [errorLocal, setErrorLocal] = useState('')
+  const [inmuebleParaConsumo, setInmuebleParaConsumo] = useState(null)
+  const [errores, setErrores] = useState({}) // { campo: mensaje } debajo de cada campo
+  const [enviando, setEnviando] = useState(false)
+  const [editando, setEditando] = useState(null) // inmueble que se está editando (HU-06)
+  const [erroresEdicion, setErroresEdicion] = useState({})
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
 
-  // Cargar inmuebles al iniciar
+  // La lista viene de la API: sobrevive a recargar la página (HU-05, criterio 1).
   useEffect(() => {
-    const cargarInmuebles = async () => {
-      try {
-        const data = await apiFetch('/api/inmuebles/')
-        setInmuebles(data)
-      } catch (err) {
-        console.error('Error al cargar inmuebles', err)
-      }
+    let activo = true
+    listarInmuebles()
+      .then((lista) => activo && setInmuebles(lista))
+      .catch((err) => activo && setErrorGeneral(err.message))
+      .finally(() => activo && setCargando(false))
+    return () => {
+      activo = false
     }
-    cargarInmuebles()
   }, [])
+
+  const abrirOCerrarFormulario = () => {
+    setErrores({})
+    setErrorGeneral('')
+    setInmuebleParaConsumo(null)
+    setMostrandoFormulario((abierto) => !abierto)
+  }
+
+  const abrirEdicion = (inmueble) => {
+    setMostrandoFormulario(false)
+    setInmuebleParaConsumo(null)
+    setErrores({})
+    setErrorGeneral('')
+    setErroresEdicion({})
+    setEditando(inmueble)
+  }
+
+  const cerrarEdicion = useCallback(() => {
+    setEditando(null)
+    setErroresEdicion({})
+  }, [])
+
+  const abrirConsumo = (inmuebleId) => {
+    setMostrandoFormulario(false)
+    setEditando(null)
+    setInmuebleParaConsumo((actual) => (actual === inmuebleId ? null : inmuebleId))
+  }
+
+  const manejarEdicion = async (e) => {
+    e.preventDefault()
+    setErroresEdicion({})
+
+    const formData = new FormData(e.target)
+    const nombre = (formData.get('nombre') ?? '').trim()
+    const direccion = (formData.get('direccion') ?? '').trim()
+
+    // Mismas validaciones que el alta: un nombre vacío no llega a la API.
+    if (!nombre) {
+      setErroresEdicion({ nombre: MENSAJE_NOMBRE_VACIO })
+      return
+    }
+
+    setGuardandoEdicion(true)
+    try {
+      const actualizado = await actualizarInmueble(editando.id, { nombre, direccion })
+      setInmuebles((actuales) => actuales.map((inm) => (inm.id === actualizado.id ? actualizado : inm)))
+      setEditando(null)
+    } catch (err) {
+      // 409 / 422 / 404 traen { errores: { campo: mensaje } }; el resto (sin conexión, 500) va como aviso general.
+      if (err.errores && Object.keys(err.errores).length > 0) setErroresEdicion(err.errores)
+      else setErroresEdicion({ general: err.message })
+    } finally {
+      setGuardandoEdicion(false)
+    }
+  }
 
   const manejarEnvio = async (e) => {
     e.preventDefault()
-    setErrorLocal('')
-    
+    setErrores({})
+    setErrorGeneral('')
+
     const formData = new FormData(e.target)
-    const datos = {
-      nombre: formData.get('nombre'),
-      direccion: formData.get('direccion') || ""
+    const nombre = (formData.get('nombre') ?? '').trim()
+    const direccion = (formData.get('direccion') ?? '').trim()
+
+    // Validación local: un nombre vacío no llega a la API (HU-05, criterio 2).
+    if (!nombre) {
+      setErrores({ nombre: MENSAJE_NOMBRE_VACIO })
+      return
     }
 
+    setEnviando(true)
     try {
-      const nuevoInmueble = await apiFetch('/api/inmuebles/', {
-        method: 'POST',
-        body: datos
-      })
-      setInmuebles([...inmuebles, nuevoInmueble])
+      const nuevo = await crearInmueble({ nombre, direccion })
+      setInmuebles((actuales) => [...actuales, nuevo])
       setMostrandoFormulario(false)
     } catch (err) {
-      setErrorLocal(err.message)
+      // 409 y 422 traen { errores: { campo: mensaje } }: se muestran debajo del campo.
+      if (err.errores && Object.keys(err.errores).length > 0) setErrores(err.errores)
+      else setErrorGeneral(err.message)
+    } finally {
+      setEnviando(false)
     }
   }
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white px-6 py-4 shadow-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Mis inmuebles</h1>
           <div className="flex items-center gap-4">
             {usuario?.nombre && <span className="text-sm text-slate-500">{usuario.nombre}</span>}
-            
+
             <button
-              onClick={() => {
-                setMostrandoFormulario(!mostrandoFormulario)
-                setInmuebleSeleccionado(null)
-              }}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700 transition"
+              type="button"
+              onClick={abrirOCerrarFormulario}
+              className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
             >
-              <Plus className="h-4 w-4" />
-              Nuevo Inmueble
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Nuevo inmueble
             </button>
 
             <button
               type="button"
               onClick={logout}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 transition"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-4 w-4" aria-hidden="true" />
               Cerrar sesión
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-10 space-y-10">
-        {/* Formulario de Nuevo Inmueble */}
+      <main className="mx-auto max-w-5xl px-6 py-10 space-y-8">
+        {errorGeneral && (
+          <p role="alert" className="mb-4 text-sm text-red-600">
+            {errorGeneral}
+          </p>
+        )}
+
         {mostrandoFormulario && (
-          <form onSubmit={manejarEnvio} className="mb-8 rounded-lg bg-white p-6 shadow-sm border border-slate-200">
-            <h2 className="mb-4 text-lg font-semibold text-slate-800">Registrar nuevo inmueble</h2>
-            {errorLocal && <p className="mb-4 text-sm text-red-600">{errorLocal}</p>}
-            
+          <form
+            onSubmit={manejarEnvio}
+            noValidate
+            aria-label="Registrar nuevo inmueble"
+            className="mb-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+          >
+            <h2 className="mb-4 text-lg font-semibold">Registrar nuevo inmueble</h2>
+
             <div className="grid gap-4 md:grid-cols-2">
-              <CampoFormulario 
+              <CampoFormulario
                 id="nombre"
-                name="nombre" 
-                label="Nombre del inmueble *" 
-                required 
-                placeholder="Ej. Casa centro" 
+                name="nombre"
+                etiqueta="Nombre del inmueble *"
+                placeholder="Ej. Casa centro"
+                maxLength={100}
+                error={errores.nombre}
               />
-              <CampoFormulario 
+              <CampoFormulario
                 id="direccion"
-                name="direccion" 
-                label="Dirección (Opcional)" 
-                placeholder="Ej. San Martín 123" 
+                name="direccion"
+                etiqueta="Dirección (opcional)"
+                placeholder="Ej. San Martín 123"
+                maxLength={255}
+                error={errores.direccion}
               />
             </div>
-            
+
             <div className="mt-6 flex justify-end gap-3">
-              <button 
-                type="button" 
-                onClick={() => setMostrandoFormulario(false)}
+              <button
+                type="button"
+                onClick={abrirOCerrarFormulario}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 type="submit"
-                className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+                disabled={enviando}
+                className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60"
               >
-                Guardar
+                {enviando ? 'Guardando…' : 'Guardar'}
               </button>
             </div>
           </form>
         )}
 
-        {/* Listado de Inmuebles o Panel Vacío */}
-        {inmuebles.length === 0 ? (
-          <PanelVacio />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {inmuebles.map((inm, index) => (
-              <div key={inm.id || index} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm flex flex-col justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-900 text-lg">{inm.nombre}</h3>
-                  <p className="text-sm text-slate-500 mt-1">{inm.direccion || 'Sin dirección registrada'}</p>
-                </div>
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">ID: {inm.id}</span>
-                  <button
-                    onClick={() => setInmuebleSeleccionado(inmuebleSeleccionado === inm.id ? null : inm.id)}
-                    className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-md hover:bg-teal-100 font-medium transition"
-                  >
-                    {inmuebleSeleccionado === inm.id ? 'Ocultar Consumo' : '+ Cargar Consumo'}
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* Sección de Formulario de Consumo para el inmueble seleccionado */}
+        {inmuebleParaConsumo && (
+          <div className="border border-teal-200 rounded-xl bg-teal-50/30 p-4">
+            <FormularioConsumo
+              inmuebleId={inmuebleParaConsumo}
+              inmuebles={inmuebles}
+              onCancelar={() => setInmuebleParaConsumo(null)}
+              onLecturaCreada={() => {}}
+            />
           </div>
         )}
 
-        {/* Sección del Formulario de Consumos vinculada a la tarjeta seleccionada */}
-        {inmuebleSeleccionado && (
-          <div className="border-t border-slate-200 pt-8 mt-6">
-            <div className="bg-teal-50 border border-teal-200 p-4 rounded-lg mb-4 flex justify-between items-center">
-              <span className="text-sm font-medium text-teal-900">
-                Registrando consumo para el inmueble seleccionado (ID: {inmuebleSeleccionado})
-              </span>
-              <button 
-                onClick={() => setInmuebleSeleccionado(null)}
-                className="text-xs text-teal-700 hover:text-teal-900 font-semibold"
-              >
-                Cerrar formulario
-              </button>
-            </div>
-            <FormularioConsumo inmueblePreseleccionado={inmuebleSeleccionado} />
-          </div>
+        {cargando ? (
+          <p role="status" className="text-sm text-slate-500">
+            Cargando tus inmuebles…
+          </p>
+        ) : inmuebles.length === 0 ? (
+          !mostrandoFormulario && <PanelVacio />
+        ) : (
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {inmuebles.map((inm) => (
+              <li key={inm.id} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-slate-900 text-lg">{inm.nombre}</h3>
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicion(inm)}
+                      aria-label={`Editar ${inm.nombre}`}
+                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">{inm.direccion || 'Sin dirección registrada'}</p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">ID: {inm.id}</span>
+                  <button
+                    type="button"
+                    onClick={() => abrirConsumo(inm.id)}
+                    className="inline-flex items-center gap-1.5 text-xs bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-md hover:bg-teal-100 font-medium transition"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-teal-600" />
+                    <span>{inmuebleParaConsumo === inm.id ? 'Ocultar consumo' : '+ Cargar consumo'}</span>
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </main>
+
+      {editando && (
+        <EditarInmuebleModal
+          key={editando.id}
+          inmueble={editando}
+          errores={erroresEdicion}
+          enviando={guardandoEdicion}
+          onSubmit={manejarEdicion}
+          onCancelar={cerrarEdicion}
+        />
+      )}
     </div>
   )
 }

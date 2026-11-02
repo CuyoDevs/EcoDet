@@ -1,210 +1,505 @@
-import React, { useState, useEffect } from 'react';
-import { crearLecturaConsumo } from '../api/consumos';
-import { apiFetch } from '../api/client';
+import React, { useState, useEffect } from 'react'
+import { crearLecturaConsumo, crearLecturasLote } from '../api/consumos'
+import CampoFormulario from './CampoFormulario'
+import { Zap, Flame, Droplets, CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 
-export default function FormularioConsumo({ inmueblePreseleccionado }) {
+const UNIDADES = {
+  LUZ: 'kWh',
+  GAS: 'm³',
+  AGUA: 'm³'
+}
+
+export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLecturaCreada, onCancelar }) {
+  const [modo, setModo] = useState('individual') // 'individual' | 'lote'
+  
+  // Estado para Lectura Individual
   const [formData, setFormData] = useState({
-    inmueble_id: inmueblePreseleccionado || '',
+    inmueble_id: inmuebleId || (inmuebles.length > 0 ? inmuebles[0].id : ''),
     servicio: 'LUZ',
     fecha_inicio: '',
     fecha_fin: '',
     consumo: ''
-  });
+  })
 
-  const [inmuebles, setInmuebles] = useState([]);
-  const [listaLecturas, setListaLecturas] = useState([]);
-  const [errores, setErrores] = useState({});
-  const [mensajeGlobal, setMensajeGlobal] = useState('');
-  const [cargando, setCargando] = useState(false);
+  // Estado para Carga en Lote (HU-09 / DET-17)
+  const [filasLote, setFilasLote] = useState([
+    { servicio: 'LUZ', fecha_inicio: '', fecha_fin: '', consumo: '' },
+    { servicio: 'LUZ', fecha_inicio: '', fecha_fin: '', consumo: '' }
+  ])
+
+  const [errores, setErrores] = useState({})
+  const [mensajeExito, setMensajeExito] = useState('')
+  const [resumenLote, setResumenLote] = useState(null)
+  const [errorGeneral, setErrorGeneral] = useState('')
+  const [cargando, setCargando] = useState(false)
 
   useEffect(() => {
-    if (inmueblePreseleccionado) {
-      setFormData((prev) => ({ ...prev, inmueble_id: inmueblePreseleccionado }));
+    if (inmuebleId) {
+      setFormData((prev) => ({ ...prev, inmueble_id: inmuebleId }))
     }
-  }, [inmueblePreseleccionado]);
+  }, [inmuebleId])
 
-  // Cargar los inmuebles usando apiFetch directamente
-  useEffect(() => {
-    const cargarInmuebles = async () => {
-      try {
-        const data = await apiFetch('/api/inmuebles/');
-        setInmuebles(data);
-        if (!inmueblePreseleccionado && data.length > 0) {
-          setFormData((prev) => ({ ...prev, inmueble_id: data[0].id }));
-        }
-      } catch (err) {
-        setMensajeGlobal('Error al cargar los inmuebles.');
-      }
-    };
-    cargarInmuebles();
-  }, [inmueblePreseleccionado]);
-
-  // Cargar el historial de consumos para mostrarlos en pantalla
-  useEffect(() => {
-    const cargarLecturas = async () => {
-      try {
-        const data = await apiFetch('/api/consumos');
-        setListaLecturas(data);
-      } catch (err) {
-        console.error("Error al cargar el historial de consumos");
-      }
-    };
-    cargarLecturas();
-  }, [mensajeGlobal]);
-
+  // --- Handlers Individual ---
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    if (errores[e.target.name]) {
-      setErrores({ ...errores, [e.target.name]: null });
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+    if (errores[name]) {
+      setErrores((prev) => ({ ...prev, [name]: null }))
     }
-  };
+  }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setCargando(true);
-    setErrores({});
-    setMensajeGlobal('');
+  const handleServicioChange = (servicio) => {
+    setFormData((prev) => ({ ...prev, servicio }))
+    if (errores.servicio) {
+      setErrores((prev) => ({ ...prev, servicio: null }))
+    }
+  }
+
+  const handleSubmitIndividual = async (e) => {
+    e.preventDefault()
+    setCargando(true)
+    setErrores({})
+    setMensajeExito('')
+    setResumenLote(null)
+    setErrorGeneral('')
 
     try {
-      await crearLecturaConsumo({
-        ...formData,
+      const payload = {
         inmueble_id: Number(formData.inmueble_id),
+        servicio: formData.servicio,
+        fecha_inicio: formData.fecha_inicio,
+        fecha_fin: formData.fecha_fin,
         consumo: Number(formData.consumo)
-      });
+      }
 
-      setMensajeGlobal('¡Lectura de consumo registrada con éxito!');
-      setFormData({
-        inmueble_id: inmueblePreseleccionado || (inmuebles.length > 0 ? inmuebles[0].id : ''),
-        servicio: 'LUZ',
+      const nuevaLectura = await crearLecturaConsumo(payload)
+      setMensajeExito('¡Lectura registrada con éxito!')
+      setFormData((prev) => ({
+        ...prev,
         fecha_inicio: '',
         fecha_fin: '',
         consumo: ''
-      });
+      }))
+      if (onLecturaCreada) onLecturaCreada(nuevaLectura)
     } catch (err) {
-      if (err.errores) {
-        setErrores(err.errores);
+      if (err.errores && Object.keys(err.errores).length > 0) {
+        setErrores(err.errores)
       } else {
-        setMensajeGlobal(err.message || 'Ocurrió un error al registrar la lectura.');
+        setErrorGeneral(err.message || 'Ocurrió un error al registrar la lectura.')
       }
     } finally {
-      setCargando(false);
+      setCargando(false)
     }
-  };
+  }
+
+  // --- Handlers Lote (HU-09) ---
+  const handleFilaChange = (index, campo, valor) => {
+    setFilasLote((prev) => {
+      const copia = [...prev]
+      copia[index] = { ...copia[index], [campo]: valor }
+      return copia
+    })
+    if (errores[`fila_${index}`]) {
+      setErrores((prev) => {
+        const c = { ...prev }
+        delete c[`fila_${index}`]
+        return c
+      })
+    }
+  }
+
+  const agregarFila = () => {
+    const ultimoServicio = filasLote.length > 0 ? filasLote[filasLote.length - 1].servicio : 'LUZ'
+    setFilasLote((prev) => [
+      ...prev,
+      { servicio: ultimoServicio, fecha_inicio: '', fecha_fin: '', consumo: '' }
+    ])
+  }
+
+  const eliminarFila = (index) => {
+    if (filasLote.length <= 1) return
+    setFilasLote((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSubmitLote = async (e) => {
+    e.preventDefault()
+    setCargando(true)
+    setErrores({})
+    setMensajeExito('')
+    setResumenLote(null)
+    setErrorGeneral('')
+
+    // Validación local de campos vacíos en el lote
+    const erroresLocales = {}
+    const lecturasValidadas = []
+
+    filasLote.forEach((f, idx) => {
+      if (!f.fecha_inicio || !f.fecha_fin || f.consumo === '') {
+        erroresLocales[`fila_${idx}`] = 'Completa todos los campos de esta fila.'
+      } else if (f.fecha_inicio > f.fecha_fin) {
+        erroresLocales[`fila_${idx}`] = 'La fecha de fin no puede ser anterior al inicio.'
+      } else if (Number(f.consumo) < 0) {
+        erroresLocales[`fila_${idx}`] = 'El consumo no puede ser negativo.'
+      } else {
+        lecturasValidadas.push({
+          servicio: f.servicio,
+          fecha_inicio: f.fecha_inicio,
+          fecha_fin: f.fecha_fin,
+          consumo: Number(f.consumo)
+        })
+      }
+    })
+
+    if (Object.keys(erroresLocales).length > 0) {
+      setErrores(erroresLocales)
+      setErrorGeneral('Corrige los errores señalados en las filas antes de guardar (todo o nada).')
+      setCargando(false)
+      return
+    }
+
+    try {
+      const payload = {
+        inmueble_id: Number(formData.inmueble_id),
+        lecturas: lecturasValidadas
+      }
+
+      const res = await crearLecturasLote(payload)
+      setMensajeExito(`¡Lote de ${res.cantidad_cargadas} facturas registrado con éxito!`)
+      setResumenLote(res)
+      setFilasLote([
+        { servicio: 'LUZ', fecha_inicio: '', fecha_fin: '', consumo: '' },
+        { servicio: 'LUZ', fecha_inicio: '', fecha_fin: '', consumo: '' }
+      ])
+      if (onLecturaCreada) onLecturaCreada(res)
+    } catch (err) {
+      if (err.data?.errores) {
+        setErrores(err.data.errores)
+      } else if (err.errores) {
+        setErrores(err.errores)
+      }
+      setErrorGeneral(err.data?.mensaje || err.message || 'Error al procesar el lote (todo o nada).')
+    } finally {
+      setCargando(false)
+    }
+  }
 
   return (
-    <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md border border-slate-200">
-      <h2 className="text-xl font-bold mb-4 text-slate-800">Registrar Lectura de Consumo</h2>
-      
-      {mensajeGlobal && (
-        <div className={`p-3 mb-4 rounded text-sm ${mensajeGlobal.includes('éxito') ? 'bg-teal-50 text-teal-700 border border-teal-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-          {mensajeGlobal}
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Cargar lecturas de consumo</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Registra una factura actual o carga varias facturas anteriores (W3)</p>
+        </div>
+
+        {/* Selector de pestañas W3 */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+          <button
+            type="button"
+            onClick={() => { setModo('individual'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
+              modo === 'individual'
+                ? 'bg-white text-teal-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Lectura individual
+          </button>
+          <button
+            type="button"
+            onClick={() => { setModo('lote'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
+              modo === 'lote'
+                ? 'bg-white text-teal-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Carga histórica (lote)
+          </button>
+        </div>
+      </div>
+
+      {mensajeExito && (
+        <div role="status" className="p-3 mb-4 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+          <span>{mensajeExito}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Inmueble</label>
+      {resumenLote && (
+        <div className="p-4 mb-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1">
+          <p className="font-semibold text-slate-800">Estado del detector tras la carga:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            <li>Luz: {resumenLote.detector_activo_por_servicio.LUZ ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Aprendiendo patrón</span>}</li>
+            <li>Gas: {resumenLote.detector_activo_por_servicio.GAS ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Aprendiendo patrón</span>}</li>
+            <li>Agua: {resumenLote.detector_activo_por_servicio.AGUA ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Sin datos suficientes</span>}</li>
+          </ul>
+        </div>
+      )}
+
+      {errorGeneral && (
+        <div role="alert" className="p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <span>{errorGeneral}</span>
+        </div>
+      )}
+
+      {/* Selector de Inmueble común si no viene fijado */}
+      {inmuebles.length > 0 && !inmuebleId && (
+        <div className="mb-4">
+          <label htmlFor="inmueble_id" className="block text-sm font-medium text-slate-700 mb-1">
+            Inmueble *
+          </label>
           <select
+            id="inmueble_id"
             name="inmueble_id"
             value={formData.inmueble_id}
             onChange={handleChange}
-            required
-            className="mt-1 block w-full rounded-md border-slate-300 shadow-sm p-2 border focus:border-teal-500 focus:ring-teal-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
           >
             {inmuebles.map((inm) => (
               <option key={inm.id} value={inm.id}>
-                {inm.nombre} {inm.direccion ? `- ${inm.direccion}` : ''}
+                {inm.nombre} {inm.direccion ? `(${inm.direccion})` : ''}
               </option>
             ))}
           </select>
-          {errores.inmueble_id && <p className="text-red-600 text-xs mt-1">{errores.inmueble_id}</p>}
         </div>
+      )}
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Servicio</label>
-          <select
-            name="servicio"
-            value={formData.servicio}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-slate-300 shadow-sm p-2 border focus:border-teal-500 focus:ring-teal-500"
-          >
-            <option value="LUZ">Luz</option>
-            <option value="GAS">Gas</option>
-            <option value="AGUA">Agua</option>
-          </select>
-          {errores.servicio && <p className="text-red-600 text-xs mt-1">{errores.servicio}</p>}
-        </div>
+      {/* MODO 1: LECTURA INDIVIDUAL (HU-08) */}
+      {modo === 'individual' && (
+        <form onSubmit={handleSubmitIndividual} noValidate className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Servicio *
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => handleServicioChange('LUZ')}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-sm font-medium transition ${
+                  formData.servicio === 'LUZ'
+                    ? 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-500'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Zap className="w-4 h-4 text-amber-500" />
+                <span>Luz (kWh)</span>
+              </button>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Fecha de Inicio</label>
-          <input
-            type="date"
-            name="fecha_inicio"
-            value={formData.fecha_inicio}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full rounded-md border-slate-300 shadow-sm p-2 border focus:border-teal-500 focus:ring-teal-500"
-          />
-          {errores.fecha_inicio && <p className="text-red-600 text-xs mt-1">{errores.fecha_inicio}</p>}
-        </div>
+              <button
+                type="button"
+                onClick={() => handleServicioChange('GAS')}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-sm font-medium transition ${
+                  formData.servicio === 'GAS'
+                    ? 'border-blue-500 bg-blue-50 text-blue-900 ring-2 ring-blue-500'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Flame className="w-4 h-4 text-blue-500" />
+                <span>Gas (m³)</span>
+              </button>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Fecha de Fin</label>
-          <input
-            type="date"
-            name="fecha_fin"
-            value={formData.fecha_fin}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full rounded-md border-slate-300 shadow-sm p-2 border focus:border-teal-500 focus:ring-teal-500"
-          />
-          {errores.fecha_fin && <p className="text-red-600 text-xs mt-1">{errores.fecha_fin}</p>}
-        </div>
+              <button
+                type="button"
+                onClick={() => handleServicioChange('AGUA')}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-sm font-medium transition ${
+                  formData.servicio === 'AGUA'
+                    ? 'border-cyan-500 bg-cyan-50 text-cyan-900 ring-2 ring-cyan-500'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Droplets className="w-4 h-4 text-cyan-500" />
+                <span>Agua (m³)</span>
+              </button>
+            </div>
+          </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700">Consumo</label>
-          <input
-            type="number"
-            step="any"
-            name="consumo"
-            value={formData.consumo}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full rounded-md border-slate-300 shadow-sm p-2 border focus:border-teal-500 focus:ring-teal-500"
-            placeholder="Ej: 150.5"
-          />
-          {errores.consumo && <p className="text-red-600 text-xs mt-1">{errores.consumo}</p>}
-        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CampoFormulario
+              id="fecha_inicio"
+              name="fecha_inicio"
+              etiqueta="Fecha de inicio *"
+              type="date"
+              value={formData.fecha_inicio}
+              onChange={handleChange}
+              error={errores.fecha_inicio}
+            />
 
-        <button
-          type="submit"
-          disabled={cargando}
-          className="w-full bg-teal-600 text-white p-2 rounded-md hover:bg-teal-700 transition font-medium shadow-sm"
-        >
-          {cargando ? 'Registrando...' : 'Registrar Consumo'}
-        </button>
-      </form>
+            <CampoFormulario
+              id="fecha_fin"
+              name="fecha_fin"
+              etiqueta="Fecha de fin *"
+              type="date"
+              value={formData.fecha_fin}
+              onChange={handleChange}
+              error={errores.fecha_fin}
+            />
+          </div>
 
-      {/* Sección para visualizar el historial de consumos registrados */}
-      <div className="mt-6 pt-4 border-t border-slate-200">
-        <h3 className="text-sm font-bold text-slate-700 mb-2">Historial de Consumos Registrados</h3>
-        {listaLecturas.length > 0 ? (
-          <ul className="space-y-2">
-            {listaLecturas.map((lec) => (
-              <li key={lec.id} className="bg-slate-50 p-2.5 rounded border text-xs text-slate-700 flex justify-between items-center">
-                <div>
-                  <span className="font-semibold text-teal-700">{lec.servicio}</span>: {lec.consumo} un.
+          <div>
+            <label htmlFor="consumo" className="block text-sm font-medium text-slate-700 mb-1">
+              Consumo ({UNIDADES[formData.servicio]}) *
+            </label>
+            <div className="relative">
+              <input
+                id="consumo"
+                name="consumo"
+                type="number"
+                step="any"
+                min="0"
+                placeholder="Ej. 145.5"
+                value={formData.consumo}
+                onChange={handleChange}
+                className={`w-full rounded-lg border px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 ${
+                  errores.consumo
+                    ? 'border-red-600 focus:border-red-600 focus:ring-red-600'
+                    : 'border-slate-300 focus:border-teal-600 focus:ring-teal-600'
+                }`}
+              />
+              <span className="absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-slate-400 pointer-events-none">
+                {UNIDADES[formData.servicio]}
+              </span>
+            </div>
+            {errores.consumo && (
+              <p className="mt-1 text-xs text-red-600">{errores.consumo}</p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            {onCancelar && (
+              <button
+                type="button"
+                onClick={onCancelar}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
+              >
+                Cancelar
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={cargando}
+              className="rounded-lg bg-teal-600 px-5 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60 transition shadow-sm"
+            >
+              {cargando ? 'Registrando…' : 'Registrar consumo'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* MODO 2: CARGA EN LOTE (HU-09 / DET-17) */}
+      {modo === 'lote' && (
+        <form onSubmit={handleSubmitLote} noValidate className="space-y-5">
+          <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
+            <strong>Regla todo o nada:</strong> Ingresa tus facturas anteriores. Si alguna fecha se superpone o es inválida, ninguna se guardará hasta que corrijas los errores.
+          </div>
+
+          <div className="space-y-3">
+            {filasLote.map((fila, idx) => (
+              <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
+                  <span>Fila #{idx + 1}</span>
+                  {filasLote.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => eliminarFila(idx)}
+                      className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Quitar</span>
+                    </button>
+                  )}
                 </div>
-                <div className="text-slate-400">
-                  {lec.fecha_inicio} al {lec.fecha_fin}
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-0.5">Servicio</label>
+                    <select
+                      value={fila.servicio}
+                      onChange={(e) => handleFilaChange(idx, 'servicio', e.target.value)}
+                      className="w-full rounded border border-slate-300 bg-white p-1.5 text-xs focus:ring-1 focus:ring-teal-600"
+                    >
+                      <option value="LUZ">Luz (kWh)</option>
+                      <option value="GAS">Gas (m³)</option>
+                      <option value="AGUA">Agua (m³)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-0.5">Inicio</label>
+                    <input
+                      type="date"
+                      value={fila.fecha_inicio}
+                      onChange={(e) => handleFilaChange(idx, 'fecha_inicio', e.target.value)}
+                      className="w-full rounded border border-slate-300 bg-white p-1.5 text-xs focus:ring-1 focus:ring-teal-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-0.5">Fin</label>
+                    <input
+                      type="date"
+                      value={fila.fecha_fin}
+                      onChange={(e) => handleFilaChange(idx, 'fecha_fin', e.target.value)}
+                      className="w-full rounded border border-slate-300 bg-white p-1.5 text-xs focus:ring-1 focus:ring-teal-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-0.5">
+                      Consumo ({UNIDADES[fila.servicio]})
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0.0"
+                      value={fila.consumo}
+                      onChange={(e) => handleFilaChange(idx, 'consumo', e.target.value)}
+                      className="w-full rounded border border-slate-300 bg-white p-1.5 text-xs focus:ring-1 focus:ring-teal-600"
+                    />
+                  </div>
                 </div>
-              </li>
+
+                {errores[`fila_${idx}`] && (
+                  <p className="text-red-600 text-xs font-medium pt-1">
+                    {errores[`fila_${idx}`]}
+                  </p>
+                )}
+              </div>
             ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-slate-400 italic">No hay consumos registrados todavía.</p>
-        )}
-      </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <button
+              type="button"
+              onClick={agregarFila}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Agregar fila</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              {onCancelar && (
+                <button
+                  type="button"
+                  onClick={onCancelar}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={cargando}
+                className="rounded-lg bg-teal-600 px-5 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60 transition shadow-sm"
+              >
+                {cargando ? 'Validando lote…' : 'Guardar lote de facturas'}
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
     </div>
-  );
+  )
 }

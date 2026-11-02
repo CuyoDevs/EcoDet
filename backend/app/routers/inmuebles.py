@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -6,22 +5,24 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Inmueble, Usuario
 from ..schemas import InmuebleIn, InmuebleOut
-from ..dependencies import get_current_user  # Asumiendo que el archivo de tu compañero se llama dependencies.py
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/api/inmuebles", tags=["inmuebles"])
 
 
-# Agregado para permitir que el frontend cargue la lista de inmuebles en el formulario de consumo
 @router.get("/", response_model=list[InmuebleOut])
 def listar_inmuebles(
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user)
+    usuario: Usuario = Depends(get_current_user),
 ):
-    """
-    Lista todos los inmuebles asociados al usuario autenticado.
-    """
-    inmuebles = db.query(Inmueble).filter(Inmueble.usuario_id == usuario.id).all()
-    return inmuebles
+    """Devuelve solo los inmuebles del usuario autenticado (RN-01)."""
+    return (
+        db.query(Inmueble)
+        .filter(Inmueble.usuario_id == usuario.id)
+        .order_by(Inmueble.id)
+        .all()
+    )
+
 
 @router.post("/", response_model=InmuebleOut, status_code=status.HTTP_201_CREATED)
 def crear_inmueble(
@@ -32,7 +33,6 @@ def crear_inmueble(
     """
     Crea un nuevo inmueble asociado al usuario autenticado.
     """
-    # 1. Verificar que el usuario no tenga ya un inmueble con ese mismo nombre
     existente = db.query(Inmueble).filter(
         Inmueble.usuario_id == usuario.id,
         Inmueble.nombre == inmueble_in.nombre
@@ -44,7 +44,6 @@ def crear_inmueble(
             content={"errores": {"nombre": "Ya tienes un inmueble con este nombre."}}
         )
 
-    # 2. Crear y guardar el nuevo inmueble
     nuevo_inmueble = Inmueble(
         usuario_id=usuario.id,
         nombre=inmueble_in.nombre,
@@ -58,4 +57,43 @@ def crear_inmueble(
     return nuevo_inmueble
 
 
+@router.put("/{inmueble_id}", response_model=InmuebleOut)
+def actualizar_inmueble(
+    inmueble_id: int,
+    inmueble_in: InmuebleIn,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Actualiza los datos de un inmueble existente perteneciente al usuario autenticado.
+    """
+    inmueble = db.query(Inmueble).filter(
+        Inmueble.id == inmueble_id,
+        Inmueble.usuario_id == usuario.id
+    ).first()
 
+    if not inmueble:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"errores": {"general": "Inmueble no encontrado."}}
+        )
+
+    existente = db.query(Inmueble).filter(
+        Inmueble.usuario_id == usuario.id,
+        Inmueble.nombre == inmueble_in.nombre,
+        Inmueble.id != inmueble_id
+    ).first()
+
+    if existente:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"errores": {"nombre": "Ya tienes otro inmueble con este nombre."}}
+        )
+
+    inmueble.nombre = inmueble_in.nombre
+    inmueble.direccion = inmueble_in.direccion
+
+    db.commit()
+    db.refresh(inmueble)
+
+    return inmueble
