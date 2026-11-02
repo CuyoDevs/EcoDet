@@ -274,3 +274,100 @@ def test_carga_lote_superposicion_con_historial_todo_o_nada(client):
         "consumo": 90
     }, headers=headers)
     assert res_enero.status_code == 201
+
+
+# --- TESTS HU-10 (DET-18): Historial y gráficos por servicio ---
+
+def test_historial_sin_token_da_401(client):
+    """Petición anónima al historial debe ser rechazada con 401."""
+    res = client.get("/api/consumos/1/historial")
+    assert res.status_code == 401
+
+
+def test_historial_inmueble_ajeno_da_404(client):
+    """Historial de un inmueble ajeno devuelve 404."""
+    h1 = _crear_usuario_y_obtener_headers(client, "historial_ajeno_a@test.com")
+    h2 = _crear_usuario_y_obtener_headers(client, "historial_ajeno_b@test.com")
+    inm = _crear_inmueble(client, h1, "Casa Historial Ajena")
+    res = client.get(f"/api/consumos/{inm['id']}/historial", headers=h2)
+    assert res.status_code == 404
+    assert "inmueble_id" in res.json()["errores"]
+
+
+def test_historial_inmueble_sin_lecturas_devuelve_listas_vacias(client):
+    """Un inmueble sin lecturas devuelve historial con listas vacías y sin estadísticas."""
+    headers = _crear_usuario_y_obtener_headers(client, "historial_vacio@test.com")
+    inm = _crear_inmueble(client, headers, "Casa Historial Vacía")
+    res = client.get(f"/api/consumos/{inm['id']}/historial", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["inmueble_id"] == inm["id"]
+    for srv in ["LUZ", "GAS", "AGUA"]:
+        assert data[srv]["lecturas"] == []
+        assert data[srv]["estadisticas"] is None
+        assert data[srv]["detector_activo"] is False
+
+
+def test_historial_con_lecturas_devuelve_datos_correctos(client):
+    """Historial con lecturas retorna lecturas ordenadas, estadísticas y detector inactivo (<6)."""
+    headers = _crear_usuario_y_obtener_headers(client, "historial_con_lecturas@test.com")
+    inm = _crear_inmueble(client, headers, "Casa Historial Completa")
+    inmueble_id = inm["id"]
+
+    # Cargar 3 lecturas de LUZ en orden no cronológico
+    for mes_inicio, mes_fin, consumo in [
+        ("2026-03-01", "2026-03-31", 150),
+        ("2026-01-01", "2026-01-31", 100),
+        ("2026-02-01", "2026-02-28", 200),
+    ]:
+        r = client.post("/api/consumos", json={
+            "inmueble_id": inmueble_id,
+            "servicio": "LUZ",
+            "fecha_inicio": mes_inicio,
+            "fecha_fin": mes_fin,
+            "consumo": consumo,
+        }, headers=headers)
+        assert r.status_code == 201
+
+    res = client.get(f"/api/consumos/{inmueble_id}/historial", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+
+    luz = data["LUZ"]
+    assert len(luz["lecturas"]) == 3
+    # Deben venir ordenadas por fecha_inicio
+    fechas = [l["fecha_inicio"] for l in luz["lecturas"]]
+    assert fechas == sorted(fechas)
+    # Estadísticas presentes
+    assert luz["estadisticas"] is not None
+    assert "promedio" in luz["estadisticas"]
+    assert "tendencia" in luz["estadisticas"]
+    # Detector inactivo (solo 3 lecturas, mínimo 6)
+    assert luz["detector_activo"] is False
+    # GAS y AGUA sin lecturas
+    assert data["GAS"]["lecturas"] == []
+    assert data["AGUA"]["lecturas"] == []
+
+
+def test_historial_detector_activo_con_6_lecturas(client):
+    """Con 6 o más lecturas el detector queda activo para ese servicio."""
+    headers = _crear_usuario_y_obtener_headers(client, "historial_detector@test.com")
+    inm = _crear_inmueble(client, headers, "Casa Historial Detector")
+    inmueble_id = inm["id"]
+
+    base = date(2025, 1, 1)
+    for i in range(6):
+        inicio = base.replace(month=i + 1, day=1)
+        fin = inicio.replace(day=28)
+        r = client.post("/api/consumos", json={
+            "inmueble_id": inmueble_id,
+            "servicio": "GAS",
+            "fecha_inicio": str(inicio),
+            "fecha_fin": str(fin),
+            "consumo": 50 + i * 10,
+        }, headers=headers)
+        assert r.status_code == 201
+
+    res = client.get(f"/api/consumos/{inmueble_id}/historial", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["GAS"]["detector_activo"] is True
