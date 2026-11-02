@@ -1,21 +1,22 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { LogOut, Pencil, Plus } from 'lucide-react'
+import { LogOut, Pencil, Plus, Zap } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import PanelVacio from '../components/PanelVacio'
 import CampoFormulario from '../components/CampoFormulario'
 import EditarInmuebleModal from '../components/EditarInmuebleModal'
+import FormularioConsumo from '../components/FormularioConsumo'
 import { listarInmuebles, crearInmueble, actualizarInmueble } from '../api/inmuebles'
 
 export const MENSAJE_NOMBRE_VACIO = 'Ingresa un nombre para el inmueble.'
 
-// Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05) y editarlo (HU-06).
-// El botón "Cerrar sesión" definitivo es de DET-43.
+// Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05), editarlo (HU-06) y registrar consumo (HU-08).
 export default function PanelInmuebles() {
   const { usuario, logout } = useAuth()
   const [inmuebles, setInmuebles] = useState([])
   const [cargando, setCargando] = useState(true)
   const [errorGeneral, setErrorGeneral] = useState('')
   const [mostrandoFormulario, setMostrandoFormulario] = useState(false)
+  const [inmuebleParaConsumo, setInmuebleParaConsumo] = useState(null)
   const [errores, setErrores] = useState({}) // { campo: mensaje } debajo de cada campo
   const [enviando, setEnviando] = useState(false)
   const [editando, setEditando] = useState(null) // inmueble que se está editando (HU-06)
@@ -37,11 +38,13 @@ export default function PanelInmuebles() {
   const abrirOCerrarFormulario = () => {
     setErrores({})
     setErrorGeneral('')
+    setInmuebleParaConsumo(null)
     setMostrandoFormulario((abierto) => !abierto)
   }
 
   const abrirEdicion = (inmueble) => {
     setMostrandoFormulario(false)
+    setInmuebleParaConsumo(null)
     setErrores({})
     setErrorGeneral('')
     setErroresEdicion({})
@@ -52,6 +55,12 @@ export default function PanelInmuebles() {
     setEditando(null)
     setErroresEdicion({})
   }, [])
+
+  const abrirConsumo = (inmuebleId) => {
+    setMostrandoFormulario(false)
+    setEditando(null)
+    setInmuebleParaConsumo((actual) => (actual === inmuebleId ? null : inmuebleId))
+  }
 
   const manejarEdicion = async (e) => {
     e.preventDefault()
@@ -139,7 +148,7 @@ export default function PanelInmuebles() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-10">
+      <main className="mx-auto max-w-5xl px-6 py-10 space-y-8">
         {errorGeneral && (
           <p role="alert" className="mb-4 text-sm text-red-600">
             {errorGeneral}
@@ -193,6 +202,18 @@ export default function PanelInmuebles() {
           </form>
         )}
 
+        {/* Sección de Formulario de Consumo para el inmueble seleccionado */}
+        {inmuebleParaConsumo && (
+          <div className="border border-teal-200 rounded-xl bg-teal-50/30 p-4">
+            <FormularioConsumo
+              inmuebleId={inmuebleParaConsumo}
+              inmuebles={inmuebles}
+              onCancelar={() => setInmuebleParaConsumo(null)}
+              onLecturaCreada={() => {}}
+            />
+          </div>
+        )}
+
         {cargando ? (
           <p role="status" className="text-sm text-slate-500">
             Cargando tus inmuebles…
@@ -202,19 +223,31 @@ export default function PanelInmuebles() {
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {inmuebles.map((inm) => (
-              <li key={inm.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold text-slate-900">{inm.nombre}</h3>
-                    <p className="text-sm text-slate-500">{inm.direccion || 'Sin dirección registrada'}</p>
+              <li key={inm.id} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-slate-900 text-lg">{inm.nombre}</h3>
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicion(inm)}
+                      aria-label={`Editar ${inm.nombre}`}
+                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   </div>
+                  <p className="text-sm text-slate-500 mt-1">{inm.direccion || 'Sin dirección registrada'}</p>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">ID: {inm.id}</span>
                   <button
                     type="button"
-                    onClick={() => abrirEdicion(inm)}
-                    aria-label={`Editar ${inm.nombre}`}
-                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                    onClick={() => abrirConsumo(inm.id)}
+                    className="inline-flex items-center gap-1.5 text-xs bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-md hover:bg-teal-100 font-medium transition"
                   >
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
+                    <Zap className="w-3.5 h-3.5 text-teal-600" />
+                    <span>{inmuebleParaConsumo === inm.id ? 'Ocultar consumo' : '+ Cargar consumo'}</span>
                   </button>
                 </div>
               </li>

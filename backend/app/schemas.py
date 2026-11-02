@@ -119,3 +119,46 @@ class InmuebleOut(BaseModel):
     nombre: str
     direccion: str | None = None
 
+from datetime import date
+from .models import ServicioEnum
+
+class LecturaIn(BaseModel):
+    inmueble_id: int
+    servicio: ServicioEnum
+    fecha_inicio: date
+    fecha_fin: date
+    consumo: float
+
+    @field_validator('consumo')
+    @classmethod
+    def _consumo(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError('El consumo no puede ser negativo.')
+        return v
+
+    @field_validator('fecha_inicio')
+    @classmethod
+    def _fecha_inicio(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError('La fecha de inicio no puede ser posterior a hoy.')
+        return v
+
+    @field_validator('fecha_fin')
+    @classmethod
+    def _fecha_fin(cls, v: date, info) -> date:
+        fecha_inicio = info.data.get('fecha_inicio')
+        if fecha_inicio and v < fecha_inicio:
+            raise ValueError('La fecha de fin no puede ser anterior a la de inicio.')
+        if v > date.today():
+            raise ValueError('La fecha de fin no puede ser posterior a hoy.')
+        return v
+
+class LecturaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    inmueble_id: int
+    servicio: ServicioEnum
+    fecha_inicio: date
+    fecha_fin: date
+    consumo: float
