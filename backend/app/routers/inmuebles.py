@@ -10,6 +10,19 @@ from ..dependencies import get_current_user  # Asumiendo que el archivo de tu co
 
 router = APIRouter(prefix="/api/inmuebles", tags=["inmuebles"])
 
+
+# Agregado para permitir que el frontend cargue la lista de inmuebles en el formulario de consumo
+@router.get("/", response_model=list[InmuebleOut])
+def listar_inmuebles(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Lista todos los inmuebles asociados al usuario autenticado.
+    """
+    inmuebles = db.query(Inmueble).filter(Inmueble.usuario_id == usuario.id).all()
+    return inmuebles
+
 @router.post("/", response_model=InmuebleOut, status_code=status.HTTP_201_CREATED)
 def crear_inmueble(
     inmueble_in: InmuebleIn,
