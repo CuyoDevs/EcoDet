@@ -162,3 +162,55 @@ class LecturaOut(BaseModel):
     fecha_inicio: date
     fecha_fin: date
     consumo: float
+
+
+# --- Esquemas para Carga en Lote (HU-09 / DET-17) ---
+
+class LecturaFilaIn(BaseModel):
+    servicio: ServicioEnum
+    fecha_inicio: date
+    fecha_fin: date
+    consumo: float
+
+    @field_validator('consumo')
+    @classmethod
+    def _consumo(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError('El consumo no puede ser negativo.')
+        return v
+
+    @field_validator('fecha_inicio')
+    @classmethod
+    def _fecha_inicio(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError('La fecha de inicio no puede ser posterior a hoy.')
+        return v
+
+    @field_validator('fecha_fin')
+    @classmethod
+    def _fecha_fin(cls, v: date, info) -> date:
+        fecha_inicio = info.data.get('fecha_inicio')
+        if fecha_inicio and v < fecha_inicio:
+            raise ValueError('La fecha de fin no puede ser anterior a la de inicio.')
+        if v > date.today():
+            raise ValueError('La fecha de fin no puede ser posterior a hoy.')
+        return v
+
+
+class CargaLoteIn(BaseModel):
+    inmueble_id: int
+    lecturas: list[LecturaFilaIn]
+
+    @field_validator('lecturas')
+    @classmethod
+    def _lecturas(cls, v: list[LecturaFilaIn]) -> list[LecturaFilaIn]:
+        if not v:
+            raise ValueError('Debe incluir al menos una lectura en el lote.')
+        return v
+
+
+class CargaLoteOut(BaseModel):
+    inmueble_id: int
+    cantidad_cargadas: int
+    lecturas: list[LecturaOut]
+    detector_activo_por_servicio: dict[str, bool]

@@ -1,7 +1,7 @@
 # EcoDet · Sprint Backlog del Sprint 1
-## Elementos seleccionados, estimaciones, dependencias y riesgos
+## Elementos seleccionados, estimaciones, dependencias, subtareas y riesgos
 **Taller de Tecnología Aplicada · Proyecto: Implementación de Scrum con Jira**  
-**Versión:** 1.0 · **Fecha:** 20/10/2026 · **Product Owner:** Mateo · **Scrum Master:** Ari
+**Versión:** 1.1 · **Fecha:** 02/11/2026 · **Product Owner:** Mateo · **Scrum Master:** Ari
 
 ---
 
@@ -23,16 +23,27 @@ Total comprometido: **9 historias de usuario** y **43 puntos de historia** (7 Mu
 
 ---
 
-## 2. Camino Crítico y Dependencias
+## 2. Desglose detallado de Subtareas Técnicas (DET-17 y DET-18)
 
-$$\text{HU-01} \longrightarrow \text{HU-02} \longrightarrow \text{HU-03} \longrightarrow \text{HU-05} \longrightarrow \text{HU-08} \longrightarrow \text{HU-10}$$
+### 📌 DET-17 · HU-09: Cargar facturas anteriores de una sola vez (8 pts)
+- **Subtarea 1 (DET-17-ST1 · Backend):** Esquemas Pydantic `LecturaFilaIn`, `CargaLoteIn` y `CargaLoteOut` con validación de no negatividad, fechas no futuras y fin $\ge$ inicio.
+- **Subtarea 2 (DET-17-ST2 · Backend):** Endpoint `POST /api/consumos/lote` con validación atómica "todo o nada":
+  - Detección de solapamiento interno entre las filas del lote (retorna 409 con detalle de fila).
+  - Detección de solapamiento externo contra lecturas previas en la BD (retorna 409).
+  - Transacción `db.begin()` / `commit()` / `rollback()` ante fallas.
+- **Subtarea 3 (DET-17-ST3 · Backend/Lógica):** Cálculo dinámico de activación del detector por servicio (RN-07: $\ge 6$ lecturas históricas) devuelto en la respuesta.
+- **Subtarea 4 (DET-17-ST4 · Frontend):** Pestaña "Carga histórica (lote)" en W3 (`FormularioConsumo.jsx`) con tabla interactiva para agregar/quitar filas dinámicamente y reporte de errores por fila.
+- **Subtarea 5 (DET-17-ST5 · Testing & QA):** Pruebas unitarias en `test_consumos.py` y `FormularioConsumo.test.jsx`, y matriz de pruebas manuales en `docs/sprints/sprint-1/qa-HU-09.md`.
 
-- **Largo del camino crítico:** 6 historias encadenadas que suman **32 puntos**.
-- **Estrategia para evitar cuellos de botella:**
-  - Mientras el backend implementa endpoints de base de datos y autenticación, los desarrolladores de frontend construyen las pantallas **W1 a W4** en React con componentes visuales y datos simulados (mock data).
-  - Al estar listos los endpoints, se conectan sin fricción.
-- **Gestión de alcance (MoSCoW):**
-  - Si surgen atrasos hacia el final del sprint, las historias *Should* son las primeras en postergarse al Sprint 2 o Release 2: primero **HU-04** (1 pt) y luego **HU-06** (2 pts). Las historias *Must* no se recortan.
+---
+
+### 📌 DET-18 · HU-10: Ver historial y gráficos por servicio (8 pts)
+- **Subtarea 1 (DET-18-ST1 · Backend):** Endpoint `GET /api/inmuebles/{id}/historial` que devuelva las lecturas ordenadas cronológicamente con `consumo_por_dia` y cálculo de estación (RN-06, RN-08).
+- **Subtarea 2 (DET-18-ST2 · Backend/Filtrado):** Soporte de filtrado por servicio (LUZ, GAS, AGUA) y manejo de servicio agua sin datos sin emitir error (RN-04).
+- **Subtarea 3 (DET-18-ST3 · Frontend/UI):** Pantalla W4 (`HistorialGraficos.jsx`) con selector de servicio (pestañas Luz, Gas, Agua).
+- **Subtarea 4 (DET-18-ST4 · Frontend/Chart.js):** Integración de `Chart.js` (`react-chartjs-2`) renderizando la serie temporal con colores oficiales (Luz ámbar, Gas azul, Agua celeste) y formato de ejes en kWh/día o m³/día.
+- **Subtarea 5 (DET-18-ST5 · Frontend/Interacción):** Detalle interactivo al seleccionar o hacer hover en un punto (período, consumo total y consumo diario) y estado vacío amigable si no hay lecturas.
+- **Subtarea 6 (DET-18-ST6 · Testing & QA):** Tests unitarios de frontend con Vitest para gráficos y estados vacíos, y matriz `qa-HU-10.md`.
 
 ---
 
@@ -75,8 +86,8 @@ $$\text{HU-01} \longrightarrow \text{HU-02} \longrightarrow \text{HU-03} \longri
 
 ### HU-09 · Cargar facturas anteriores de una sola vez (DET-17)
 1. Interfaz de carga histórica en lote con múltiples filas.
-2. Validación "todo o nada": si una fila falla o se superpone, no se guarda ninguna y se indica el error exacto.
-3. Si el lote supera 6 lecturas, deja al detector activo para ese servicio.
+2. Validación "todo o nada": si una fila falla o se superpone, no se guarda ninguna y se indica el error exacto por fila.
+3. Si el lote supera 6 lecturas por servicio, reporta que el detector queda activo para ese servicio (RN-07).
 
 ### HU-10 · Ver historial y gráficos por servicio (DET-18)
 1. Un gráfico por servicio ordenado cronológicamente.
