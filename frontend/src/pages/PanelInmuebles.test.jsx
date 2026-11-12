@@ -5,9 +5,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import PanelInmuebles, { MENSAJE_NOMBRE_VACIO } from './PanelInmuebles'
 import { AuthProvider } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
-import { listarInmuebles, crearInmueble, actualizarInmueble } from '../api/inmuebles'
+import { listarInmuebles, crearInmueble, actualizarInmueble, eliminarInmueble } from '../api/inmuebles'
 
-vi.mock('../api/inmuebles', () => ({ listarInmuebles: vi.fn(), crearInmueble: vi.fn(), actualizarInmueble: vi.fn() }))
+vi.mock('../api/inmuebles', () => ({
+  listarInmuebles: vi.fn(),
+  crearInmueble: vi.fn(),
+  actualizarInmueble: vi.fn(),
+  eliminarInmueble: vi.fn()
+}))
 
 const CASA = { id: 1, usuario_id: 1, nombre: 'Casa Norte', direccion: 'Ruta 40' }
 
@@ -32,6 +37,7 @@ beforeEach(() => {
   listarInmuebles.mockReset()
   crearInmueble.mockReset()
   actualizarInmueble.mockReset()
+  eliminarInmueble.mockReset()
 })
 
 describe('PanelInmuebles · lista (HU-05, criterio 1)', () => {
@@ -251,5 +257,129 @@ describe('PanelInmuebles · editar (HU-06)', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(actualizarInmueble).not.toHaveBeenCalled()
+  })
+})
+
+describe('PanelInmuebles · eliminar (HU-07)', () => {
+  const DEPTO = { id: 2, usuario_id: 1, nombre: 'Depto', direccion: null }
+  const abrirEliminacion = (user, nombre = 'Casa Norte') => user.click(screen.getByRole('button', { name: `Eliminar ${nombre}` }))
+  const confirmar = (user) => user.click(screen.getByRole('button', { name: /sí, eliminar/i }))
+
+  it('criterio 1: "Eliminar" advierte que se borran lecturas y alertas y pide confirmación, sin borrar nada todavía', async () => {
+    const user = await montar([CASA, DEPTO])
+    await screen.findByText('Casa Norte')
+    await abrirEliminacion(user)
+
+    const dialogo = screen.getByRole('alertdialog', { name: /eliminar inmueble/i })
+    expect(dialogo).toHaveTextContent('Casa Norte')
+    expect(dialogo).toHaveTextContent(/lecturas y alertas/i)
+    expect(screen.getByRole('button', { name: /sí, eliminar/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /cancelar/i })).toBeInTheDocument()
+    expect(eliminarInmueble).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('criterio 2: al confirmar elimina el inmueble, cierra el aviso y quita solo esa tarjeta', async () => {
+    const user = await montar([CASA, DEPTO])
+    await screen.findByText('Casa Norte')
+    eliminarInmueble.mockResolvedValue(null) // 204 sin cuerpo
+
+    await abrirEliminacion(user)
+    await confirmar(user)
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(eliminarInmueble).toHaveBeenCalledTimes(1)
+    expect(eliminarInmueble).toHaveBeenCalledWith(1)
+    expect(screen.queryByText('Casa Norte')).not.toBeInTheDocument()
+    expect(screen.getByText('Depto')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('al eliminar el último inmueble vuelve a mostrar el panel vacío', async () => {
+    const user = await montar([CASA])
+    await screen.findByText('Casa Norte')
+    eliminarInmueble.mockResolvedValue(null)
+
+    await abrirEliminacion(user)
+    await confirmar(user)
+
+    expect(await screen.findByText(/todavía no tienes ningún inmueble/i)).toBeInTheDocument()
+  })
+
+  it('criterio 3: Cancelar y Esc cierran el aviso sin llamar a la API ni quitar nada', async () => {
+    const user = await montar([CASA, DEPTO])
+    await screen.findByText('Casa Norte')
+
+    await abrirEliminacion(user)
+    await user.click(screen.getByRole('button', { name: /cancelar/i }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+    await abrirEliminacion(user)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+    expect(eliminarInmueble).not.toHaveBeenCalled()
+    expect(screen.getByText('Casa Norte')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('el aviso se abre sobre el inmueble elegido (no sobre otro)', async () => {
+    const user = await montar([CASA, DEPTO])
+    await screen.findByText('Depto')
+    eliminarInmueble.mockResolvedValue(null)
+
+    await abrirEliminacion(user, 'Depto')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Depto')
+    await confirmar(user)
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(eliminarInmueble).toHaveBeenCalledWith(2)
+    expect(screen.getByText('Casa Norte')).toBeInTheDocument()
+    expect(screen.queryByText('Depto')).not.toBeInTheDocument()
+  })
+
+  it('si el servidor responde 404 muestra el mensaje en el aviso y no cambia la lista', async () => {
+    const user = await montar([CASA, DEPTO])
+    await screen.findByText('Casa Norte')
+    eliminarInmueble.mockRejectedValue(new ApiError(404, { errores: { general: 'Inmueble no encontrado.' } }))
+
+    await abrirEliminacion(user)
+    await confirmar(user)
+
+    expect(await screen.findByText('Inmueble no encontrado.')).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument() // sigue abierto
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('sin conexión avisa en el aviso, no quita el inmueble y al reabrirlo no quedan errores', async () => {
+    const user = await montar([CASA])
+    await screen.findByText('Casa Norte')
+    eliminarInmueble.mockRejectedValue(new ApiError(0, null))
+
+    await abrirEliminacion(user)
+    await confirmar(user)
+    expect(await screen.findByText(/no se pudo conectar con el servidor/i)).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1) // la tarjeta sigue en la lista
+
+    await user.click(screen.getByRole('button', { name: /cancelar/i }))
+    await abrirEliminacion(user)
+    expect(screen.queryByText(/no se pudo conectar con el servidor/i)).not.toBeInTheDocument()
+  })
+
+  it('mientras se elimina, los botones quedan deshabilitados (no se envía dos veces)', async () => {
+    const user = await montar([CASA])
+    await screen.findByText('Casa Norte')
+    let terminar
+    eliminarInmueble.mockReturnValue(new Promise((resolve) => { terminar = resolve }))
+
+    await abrirEliminacion(user)
+    await confirmar(user)
+
+    expect(screen.getByRole('button', { name: /eliminando/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /cancelar/i })).toBeDisabled()
+    expect(eliminarInmueble).toHaveBeenCalledTimes(1)
+
+    terminar(null)
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
   })
 })
