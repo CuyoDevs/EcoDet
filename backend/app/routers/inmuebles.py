@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -97,3 +97,36 @@ def actualizar_inmueble(
     db.refresh(inmueble)
 
     return inmueble
+
+
+@router.delete("/{inmueble_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def eliminar_inmueble(
+    inmueble_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Elimina un inmueble del usuario autenticado junto con todos sus datos asociados:
+    lecturas, alertas y umbrales (HU-07 / DET-15). Responde 204 sin cuerpo.
+
+    El borrado en cascada lo hace el ORM (`cascade="all, delete-orphan"` en `Inmueble.lecturas`,
+    `Inmueble.umbrales` y `Lectura.alerta`): no depende de que SQLite tenga activadas las claves
+    foráneas, así que por eso se borra con `db.delete()` y no con un DELETE masivo.
+    También sirve para el inmueble de demostración (HU-19).
+    """
+    inmueble = db.query(Inmueble).filter(
+        Inmueble.id == inmueble_id,
+        Inmueble.usuario_id == usuario.id
+    ).first()
+
+    # RN-01: el inmueble de otro usuario responde igual que uno inexistente.
+    if not inmueble:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"errores": {"general": "Inmueble no encontrado."}}
+        )
+
+    db.delete(inmueble)
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

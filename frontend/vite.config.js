@@ -5,7 +5,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Escucha en todas las interfaces: así el front abre tanto por localhost como
+    // por 127.0.0.1. Por defecto Vite solo escucha en localhost (IPv6 ::1).
+    host: true,
     port: 5173,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',

@@ -17,3 +17,9 @@ export function crearInmueble({ nombre, direccion }) {
 export function actualizarInmueble(id, { nombre, direccion }) {
   return apiFetch(`/api/inmuebles/${id}`, { method: 'PUT', body: { nombre, direccion } })
 }
+
+// DELETE /api/inmuebles/{id} -> 204 sin cuerpo (HU-07). Borra también sus lecturas y alertas.
+// 404 { errores: { general } } si no existe o no es del usuario.
+export function eliminarInmueble(id) {
+  return apiFetch(`/api/inmuebles/${id}`, { method: 'DELETE' })
+}

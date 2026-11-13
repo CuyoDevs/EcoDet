@@ -104,7 +104,7 @@ uvicorn app.main:app --reload --port 8000
 ```
 - **API en vivo:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
 - **Swagger UI interactivo:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **Endpoint de salud y base de datos:** [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
+- **Endpoint de salud y base de datos:** [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health) (alias corto: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health))
 
 ### 3. Levantar el Frontend (React + Vite)
 En una segunda terminal:
@@ -118,7 +118,7 @@ npm install
 # Iniciar servidor de desarrollo
 npm run dev
 ```
-- **Aplicación web:** [http://localhost:5173](http://localhost:5173)
+- **Aplicación web:** [http://localhost:5173](http://localhost:5173) (también `http://127.0.0.1:5173`)
 
 ### 4. Ejecutar Pruebas Automáticas
 ```bash

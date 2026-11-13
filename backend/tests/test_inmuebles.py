@@ -191,3 +191,128 @@ def test_editar_inmueble_no_modifica_lecturas_ni_alertas(client, db):
         (lectura.id, 120.5, date(2026, 1, 1), date(2026, 1, 31))]
     alertas = db.query(Alerta).all()
     assert len(alertas) == 1 and alertas[0].lectura_id == lectura.id and alertas[0].desvio_porcentual == 40.0
+
+
+# ---- DET-15 / HU-07: eliminar un inmueble (DELETE /api/inmuebles/{id}) ----
+
+def _con_lectura_alerta_y_umbral(db, inmueble_id, consumo=100.0):
+    """Cuelga del inmueble una lectura con su alerta y un umbral: los datos que deben borrarse en cascada."""
+    from datetime import date
+    from backend.app.models import Alerta, Lectura, ServicioEnum, TipoAlertaEnum, UmbralServicio
+
+    lectura = Lectura(inmueble_id=inmueble_id, servicio=ServicioEnum.LUZ,
+                      fecha_inicio=date(2026, 1, 1), fecha_fin=date(2026, 1, 31), consumo=consumo)
+    db.add(lectura)
+    db.commit()
+    db.add(Alerta(lectura_id=lectura.id, tipo=TipoAlertaEnum.ALTA, desvio_porcentual=40.0,
+                  consumo_por_dia=3.9, consumo_habitual_por_dia=2.8))
+    db.add(UmbralServicio(inmueble_id=inmueble_id, servicio=ServicioEnum.LUZ, desvios=2.5))
+    db.commit()
+    return lectura
+
+
+def test_eliminar_inmueble_exito_da_204_y_desaparece_de_la_lista(client):
+    h = _headers(client, "del1@eco.com")
+    casa = _crear(client, h, "Casa", "Calle 1")
+    depto = _crear(client, h, "Depto")
+    r = client.delete(f"/api/inmuebles/{casa['id']}", headers=h)
+    assert r.status_code == 204
+    assert r.content == b""
+    assert [i["nombre"] for i in client.get("/api/inmuebles/", headers=h).json()] == ["Depto"]
+    assert client.get("/api/inmuebles/", headers=h).json()[0]["id"] == depto["id"]  # el otro sigue intacto
+
+
+def test_eliminar_inmueble_borra_en_cascada_lecturas_alertas_y_umbrales(client, db):
+    """HU-07, criterio 2: se elimina el inmueble con todos sus datos asociados."""
+    from backend.app.models import Alerta, Inmueble, Lectura, UmbralServicio
+
+    h = _headers(client, "del2@eco.com")
+    inm = _crear(client, h, "Casa")
+    _con_lectura_alerta_y_umbral(db, inm["id"])
+    assert db.query(Lectura).count() == 1 and db.query(Alerta).count() == 1 and db.query(UmbralServicio).count() == 1
+
+    assert client.delete(f"/api/inmuebles/{inm['id']}", headers=h).status_code == 204
+
+    db.expire_all()
+    assert db.query(Inmueble).count() == 0
+    assert db.query(Lectura).count() == 0
+    assert db.query(Alerta).count() == 0
+    assert db.query(UmbralServicio).count() == 0
+
+
+def test_eliminar_inmueble_no_toca_los_datos_de_otros_inmuebles(client, db):
+    """Solo se borran los datos del inmueble eliminado, no los de otro inmueble ni los de otro usuario."""
+    from backend.app.models import Alerta, Lectura, UmbralServicio
+
+    h_a = _headers(client, "del3a@eco.com", "A")
+    h_b = _headers(client, "del3b@eco.com", "B")
+    a1 = _crear(client, h_a, "Casa")
+    a2 = _crear(client, h_a, "Depto")
+    b1 = _crear(client, h_b, "Casa")
+    for inm in (a1, a2, b1):
+        _con_lectura_alerta_y_umbral(db, inm["id"])
+
+    assert client.delete(f"/api/inmuebles/{a1['id']}", headers=h_a).status_code == 204
+
+    db.expire_all()
+    assert sorted(l.inmueble_id for l in db.query(Lectura).all()) == sorted([a2["id"], b1["id"]])
+    assert db.query(Alerta).count() == 2
+    assert sorted(u.inmueble_id for u in db.query(UmbralServicio).all()) == sorted([a2["id"], b1["id"]])
+
+
+def test_eliminar_inmueble_de_demostracion(client, db):
+    """HU-07, criterio 4: también sirve para borrar el inmueble de demostración (HU-19)."""
+    from backend.app.models import Inmueble, Usuario
+
+    h = _headers(client, "del4@eco.com")
+    usuario = db.query(Usuario).filter(Usuario.correo == "del4@eco.com").one()
+    demo = Inmueble(usuario_id=usuario.id, nombre="Demo (ejemplo)", es_demo=True)
+    db.add(demo)
+    db.commit()
+    _con_lectura_alerta_y_umbral(db, demo.id)
+
+    assert client.delete(f"/api/inmuebles/{demo.id}", headers=h).status_code == 204
+    assert client.get("/api/inmuebles/", headers=h).json() == []
+
+
+def test_eliminar_inmueble_de_otro_usuario_da_404_y_no_lo_borra(client, db):
+    """RN-01: un usuario no puede borrar (ni saber que existe) el inmueble de otro."""
+    from backend.app.models import Lectura
+
+    h_a = _headers(client, "del5a@eco.com", "A")
+    h_b = _headers(client, "del5b@eco.com", "B")
+    inm = _crear(client, h_a, "Casa A")
+    _con_lectura_alerta_y_umbral(db, inm["id"])
+
+    r = client.delete(f"/api/inmuebles/{inm['id']}", headers=h_b)
+    assert r.status_code == 404
+    assert r.json()["errores"]["general"]
+    assert [i["nombre"] for i in client.get("/api/inmuebles/", headers=h_a).json()] == ["Casa A"]
+    db.expire_all()
+    assert db.query(Lectura).count() == 1  # sus lecturas siguen ahí
+
+
+def test_eliminar_inmueble_inexistente_da_404(client):
+    h = _headers(client, "del6@eco.com")
+    r = client.delete("/api/inmuebles/9999", headers=h)
+    assert r.status_code == 404
+    assert r.json()["errores"]["general"]
+
+
+def test_eliminar_inmueble_dos_veces_da_404_la_segunda(client):
+    h = _headers(client, "del7@eco.com")
+    inm = _crear(client, h, "Casa")
+    assert client.delete(f"/api/inmuebles/{inm['id']}", headers=h).status_code == 204
+    assert client.delete(f"/api/inmuebles/{inm['id']}", headers=h).status_code == 404
+
+
+def test_eliminar_inmueble_sin_token_da_401(client):
+    assert client.delete("/api/inmuebles/1").status_code == 401
+
+
+def test_se_puede_recrear_un_inmueble_con_el_nombre_de_uno_eliminado(client):
+    """Al borrarlo, su nombre queda libre (la unicidad es por usuario y nombre)."""
+    h = _headers(client, "del8@eco.com")
+    inm = _crear(client, h, "Casa")
+    assert client.delete(f"/api/inmuebles/{inm['id']}", headers=h).status_code == 204
+    assert client.post("/api/inmuebles/", json={"nombre": "Casa"}, headers=h).status_code == 201

@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { BarChart2, LogOut, Pencil, Plus, Zap } from 'lucide-react'
+import { BarChart2, LogOut, Pencil, Plus, Trash2, Zap } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import PanelVacio from '../components/PanelVacio'
 import CampoFormulario from '../components/CampoFormulario'
 import EditarInmuebleModal from '../components/EditarInmuebleModal'
+import EliminarInmuebleModal from '../components/EliminarInmuebleModal'
 import FormularioConsumo from '../components/FormularioConsumo'
 import HistorialConsumos from '../components/HistorialConsumos'
-import { listarInmuebles, crearInmueble, actualizarInmueble } from '../api/inmuebles'
+import { listarInmuebles, crearInmueble, actualizarInmueble, eliminarInmueble } from '../api/inmuebles'
 
 export const MENSAJE_NOMBRE_VACIO = 'Ingresa un nombre para el inmueble.'
 
 // Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05),
-// editarlo (HU-06), registrar consumo (HU-08) y ver el historial (HU-10).
+// editarlo (HU-06), eliminarlo (HU-07), registrar consumo (HU-08) y ver el historial (HU-10).
 export default function PanelInmuebles() {
   const { usuario, logout } = useAuth()
   const [inmuebles, setInmuebles] = useState([])
@@ -25,6 +26,9 @@ export default function PanelInmuebles() {
   const [editando, setEditando] = useState(null) // inmueble que se está editando (HU-06)
   const [erroresEdicion, setErroresEdicion] = useState({})
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  const [eliminando, setEliminando] = useState(null) // inmueble pendiente de confirmar su borrado (HU-07)
+  const [errorEliminacion, setErrorEliminacion] = useState('')
+  const [borrando, setBorrando] = useState(false)
 
   // La lista viene de la API: sobrevive a recargar la página (HU-05, criterio 1).
   useEffect(() => {
@@ -59,6 +63,21 @@ export default function PanelInmuebles() {
   const cerrarEdicion = useCallback(() => {
     setEditando(null)
     setErroresEdicion({})
+  }, [])
+
+  const abrirEliminacion = (inmueble) => {
+    setMostrandoFormulario(false)
+    setInmuebleParaConsumo(null)
+    setInmuebleParaHistorial(null)
+    setEditando(null)
+    setErrorGeneral('')
+    setErrorEliminacion('')
+    setEliminando(inmueble)
+  }
+
+  const cerrarEliminacion = useCallback(() => {
+    setEliminando(null)
+    setErrorEliminacion('')
   }, [])
 
   const abrirConsumo = (inmuebleId) => {
@@ -100,6 +119,22 @@ export default function PanelInmuebles() {
       else setErroresEdicion({ general: err.message })
     } finally {
       setGuardandoEdicion(false)
+    }
+  }
+
+  // Solo se llega acá tras pulsar "Sí, eliminar": cancelar o cerrar no borra nada (HU-07, criterio 3).
+  const confirmarEliminacion = async () => {
+    setErrorEliminacion('')
+    setBorrando(true)
+    try {
+      await eliminarInmueble(eliminando.id)
+      setInmuebles((actuales) => actuales.filter((inm) => inm.id !== eliminando.id))
+      setEliminando(null)
+    } catch (err) {
+      // 404 trae { errores: { general } }; el resto (sin conexión, 500) usa el mensaje del error.
+      setErrorEliminacion(err.errores?.general ?? err.message)
+    } finally {
+      setBorrando(false)
     }
   }
 
@@ -254,14 +289,24 @@ export default function PanelInmuebles() {
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-semibold text-slate-900 text-lg">{inm.nombre}</h3>
-                    <button
-                      type="button"
-                      onClick={() => abrirEdicion(inm)}
-                      aria-label={`Editar ${inm.nombre}`}
-                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                    >
-                      <Pencil className="h-4 w-4" aria-hidden="true" />
-                    </button>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => abrirEdicion(inm)}
+                        aria-label={`Editar ${inm.nombre}`}
+                        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => abrirEliminacion(inm)}
+                        aria-label={`Eliminar ${inm.nombre}`}
+                        className="rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-sm text-slate-500 mt-1">{inm.direccion || 'Sin dirección registrada'}</p>
                 </div>
@@ -302,6 +347,17 @@ export default function PanelInmuebles() {
           enviando={guardandoEdicion}
           onSubmit={manejarEdicion}
           onCancelar={cerrarEdicion}
+        />
+      )}
+
+      {eliminando && (
+        <EliminarInmuebleModal
+          key={eliminando.id}
+          inmueble={eliminando}
+          error={errorEliminacion}
+          enviando={borrando}
+          onConfirmar={confirmarEliminacion}
+          onCancelar={cerrarEliminacion}
         />
       )}
     </div>
