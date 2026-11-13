@@ -19,3 +19,10 @@ def test_health_check():
     assert data["detector_parameters"]["minimo_de_lecturas"] == 6
     assert data["detector_parameters"]["umbral_inicial_en_desvios"] == 2.0
     assert data["detector_parameters"]["piso_del_desvio_porcentaje_del_promedio"] == 10.0
+
+
+def test_health_check_alias_sin_api():
+    """/health funciona igual que /api/health (alias corto para monitoreo)."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == client.get("/api/health").json()

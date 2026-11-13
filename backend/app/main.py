@@ -68,10 +68,14 @@ def read_root():
 
 
 @app.get("/api/health", tags=["Salud del Sistema"], status_code=status.HTTP_200_OK)
+@app.get("/health", include_in_schema=False, status_code=status.HTTP_200_OK)
 def health_check(db: Session = Depends(get_db)):
     """
     Endpoint para verificar la conexión a la base de datos y la carga de parámetros.
     Cumple con el criterio de aceptación de HU-01 (DET-9).
+
+    `/api/health` es la ruta documentada; `/health` es un alias corto para monitoreo
+    y para evitar el 404 de quien prueba la URL sin el prefijo `/api`.
     """
     db_status = "Desconectado"
     try:
