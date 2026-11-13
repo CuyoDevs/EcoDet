@@ -11,16 +11,33 @@ from ..models import Lectura, Inmueble, Usuario, ServicioEnum
 from ..schemas import (
     LecturaIn, LecturaOut, LecturaEdicionIn, CargaLoteIn, CargaLoteOut,
     HistorialInmuebleOut, HistorialServicioOut, LecturaHistorialOut,
-    EstadisticasServicio,
+    EstadisticasServicio, EvaluacionOut, LecturaCreadaOut, LecturaLoteOut,
 )
 from ..dependencies import get_current_user
 from ..config import detector_config
-from ..services.detector import reemplazar_alerta_de_lectura
+from ..services.detector import evaluar_lectura, reemplazar_alerta_de_lectura
 
 router = APIRouter(prefix="/api/consumos", tags=["consumos"])
 
 
-@router.post("", response_model=LecturaOut, status_code=status.HTTP_201_CREATED)
+def _datos_lectura(lectura: Lectura) -> dict:
+    """Campos comunes de una lectura para las respuestas de creación."""
+    return {
+        "id": lectura.id,
+        "inmueble_id": lectura.inmueble_id,
+        "servicio": lectura.servicio,
+        "fecha_inicio": lectura.fecha_inicio,
+        "fecha_fin": lectura.fecha_fin,
+        "consumo": lectura.consumo,
+    }
+
+
+def _evaluacion_out(resultado) -> EvaluacionOut:
+    """Convierte el resultado del detector al esquema que expone la API."""
+    return EvaluacionOut.model_validate(resultado)
+
+
+@router.post("", response_model=LecturaCreadaOut, status_code=status.HTTP_201_CREATED)
 def crear_lectura(
     lectura_in: LecturaIn,
     db: Session = Depends(get_db),
@@ -28,6 +45,9 @@ def crear_lectura(
 ):
     """
     Registra una nueva lectura de consumo para un inmueble del usuario autenticado (DET-16).
+
+    Después de guardarla la evalúa contra el historial del servicio (HU-12 / DET-83) y
+    devuelve el resultado junto con la lectura. No crea la alerta: eso lo hará HU-13.
     """
     # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado (RN-01)
     inmueble = db.query(Inmueble).filter(
@@ -65,10 +85,20 @@ def crear_lectura(
     )
 
     db.add(nueva_lectura)
+    # Flush para que la lectura tenga id y quede visible en la consulta de la evaluación.
+    db.flush()
+
+    # 4. Evaluar contra el historial del mismo servicio (HU-12 / DET-83).
+    #    El resultado se devuelve, pero no se persiste ninguna alerta: eso es de HU-13.
+    resultado = evaluar_lectura(db, nueva_lectura)
+
     db.commit()
     db.refresh(nueva_lectura)
 
-    return nueva_lectura
+    return LecturaCreadaOut(
+        **_datos_lectura(nueva_lectura),
+        evaluacion=_evaluacion_out(resultado),
+    )
 
 
 @router.post("/lote", response_model=CargaLoteOut, status_code=status.HTTP_201_CREATED)
@@ -78,8 +108,12 @@ def crear_lecturas_lote(
     usuario: Usuario = Depends(get_current_user)
 ):
     """
-    Carga masiva histÃ³rica de lecturas de consumo bajo la regla 'todo o nada' (HU-09 / DET-17).
-    Si alguna fila es invÃ¡lida o se superpone interna o externamente, ninguna se persiste.
+    Carga masiva histórica de lecturas de consumo bajo la regla 'todo o nada' (HU-09 / DET-17).
+    Si alguna fila es inválida o se superpone interna o externamente, ninguna se persiste.
+
+    Después de guardar el lote evalúa cada fila contra las demás del servicio, incluidas
+    las del propio lote (HU-12 / DET-83). No crea alertas: el resultado vuelve en la
+    respuesta para que HU-13 las genere.
     """
     # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado (RN-01)
     inmueble = db.query(Inmueble).filter(
@@ -147,8 +181,9 @@ def crear_lecturas_lote(
             }
         )
 
-    # 4. TransacciÃ³n atÃ³mica Todo o Nada
+    # 4. Transacción atómica Todo o Nada + evaluación de cada fila (DET-83)
     nuevas_lecturas = []
+    evaluaciones = []
     try:
         for fila in lote_in.lecturas:
             nueva = Lectura(
@@ -160,6 +195,14 @@ def crear_lecturas_lote(
             )
             db.add(nueva)
             nuevas_lecturas.append(nueva)
+
+        # Flush para que todas las filas tengan id y se vean entre sí en la evaluación:
+        # cada lectura del lote se compara con las demás del servicio, incluidas las del lote.
+        db.flush()
+        evaluaciones = [
+            (lectura, evaluar_lectura(db, lectura)) for lectura in nuevas_lecturas
+        ]
+
         db.commit()
     except Exception as e:
         db.rollback()
@@ -168,9 +211,16 @@ def crear_lecturas_lote(
             content={"mensaje": f"Error al persistir el lote: {str(e)}"}
         )
 
-    # Refrescar instancias guardadas
-    for l in nuevas_lecturas:
-        db.refresh(l)
+    # Refrescar instancias guardadas y armar la respuesta con su evaluación
+    lecturas_out = []
+    for lectura, resultado in evaluaciones:
+        db.refresh(lectura)
+        lecturas_out.append(
+            LecturaLoteOut(
+                **_datos_lectura(lectura),
+                evaluacion=_evaluacion_out(resultado),
+            )
+        )
 
     # 5. Calcular si el detector queda activo por servicio (RN-07: >= 6 lecturas en total)
     minimo_lecturas = detector_config.minimo_de_lecturas
@@ -182,12 +232,12 @@ def crear_lecturas_lote(
         ).count()
         detector_activo[srv.value] = total_servicio >= minimo_lecturas
 
-    return {
-        "inmueble_id": lote_in.inmueble_id,
-        "cantidad_cargadas": len(nuevas_lecturas),
-        "lecturas": nuevas_lecturas,
-        "detector_activo_por_servicio": detector_activo
-    }
+    return CargaLoteOut(
+        inmueble_id=lote_in.inmueble_id,
+        cantidad_cargadas=len(nuevas_lecturas),
+        lecturas=lecturas_out,
+        detector_activo_por_servicio=detector_activo,
+    )
 
 
 def _buscar_lectura_del_usuario(db: Session, lectura_id: int, usuario: Usuario) -> Lectura | None:
