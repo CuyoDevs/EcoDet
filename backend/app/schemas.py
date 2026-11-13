@@ -164,6 +164,34 @@ class LecturaOut(BaseModel):
     consumo: float
 
 
+class EvaluacionOut(BaseModel):
+    """Resultado del detector para una lectura (HU-12 / DET-82, DET-83).
+
+    `estado` es "aprendiendo" mientras el servicio no tenga 6 lecturas (o la
+    referencia útil quede en menos de 3), y si no "dentro", "alta" o "baja".
+    Los campos de promedio, desvío y límites vienen vacíos en "aprendiendo".
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    estado: str
+    motivo: str | None = None
+    consumo_por_dia: float
+    umbral: float
+    promedio: float | None = None
+    desvio_efectivo: float | None = None
+    limite_inferior: float | None = None
+    limite_superior: float | None = None
+    cantidad_referencia: int = 0
+    referencia_estacional: bool = False
+
+
+class LecturaCreadaOut(LecturaOut):
+    """Lectura individual recién cargada, con el resultado del detector (DET-83)."""
+
+    evaluacion: EvaluacionOut
+
+
 # --- Esquemas para Carga en Lote (HU-09 / DET-17) ---
 
 class LecturaFilaIn(BaseModel):
@@ -205,6 +233,12 @@ class LecturaEdicionIn(LecturaFilaIn):
     """
 
 
+class LecturaLoteOut(LecturaOut):
+    """Fila de un lote ya guardada, con su resultado del detector (DET-83)."""
+
+    evaluacion: EvaluacionOut
+
+
 class CargaLoteIn(BaseModel):
     inmueble_id: int
     lecturas: list[LecturaFilaIn]
@@ -220,7 +254,7 @@ class CargaLoteIn(BaseModel):
 class CargaLoteOut(BaseModel):
     inmueble_id: int
     cantidad_cargadas: int
-    lecturas: list[LecturaOut]
+    lecturas: list[LecturaLoteOut]
     detector_activo_por_servicio: dict[str, bool]
 
 
