@@ -15,6 +15,7 @@ from ..schemas import (
 )
 from ..dependencies import get_current_user
 from ..config import detector_config
+from ..services.detector import reemplazar_alerta_de_lectura
 
 router = APIRouter(prefix="/api/consumos", tags=["consumos"])
 
@@ -220,7 +221,8 @@ def actualizar_lectura(
     Se valida igual que al cargarla (RN-03, RN-05: 422) y no puede superponerse con otra lectura
     del mismo servicio e inmueble (RN-14: 409); la propia lectura no cuenta como superposición.
     Cambia servicio, fechas y consumo; el inmueble no se puede cambiar.
-    La alerta anterior de la lectura se descarta porque ya no describe sus datos.
+    Después de guardar se reevalúa SOLO esta lectura y su alerta anterior se reemplaza por el
+    resultado nuevo (DET-75); las alertas ya generadas para las demás no se recalculan (RN-17).
     """
     lectura = _buscar_lectura_del_usuario(db, lectura_id, usuario)
     if not lectura:
@@ -246,10 +248,9 @@ def actualizar_lectura(
     lectura.fecha_fin = lectura_in.fecha_fin
     lectura.consumo = lectura_in.consumo
 
-    # La lectura cambió: su alerta anterior ya no es válida y se reemplaza por el resultado nuevo.
-    # Hoy ese resultado es "sin alerta" porque el motor de detección (HU-12 / CU-06) todavía no está:
-    # cuando exista, acá se vuelve a evaluar SOLO esta lectura (RN-17: las demás no se recalculan).
-    lectura.alerta = None  # delete-orphan borra la fila de alertas
+    # La lectura cambió: se reevalúa contra su historial y la alerta anterior se reemplaza
+    # por el resultado nuevo. Las alertas de las demás lecturas no se tocan (RN-17).
+    reemplazar_alerta_de_lectura(db, lectura)
 
     db.commit()
     db.refresh(lectura)

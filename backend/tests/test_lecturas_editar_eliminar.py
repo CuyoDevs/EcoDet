@@ -1,13 +1,14 @@
 """Pruebas de HU-11 · Editar o eliminar una lectura (CU-09): DET-73 (PUT) y DET-74 (DELETE).
 
-Una "lectura" es el registro de consumo que se carga con POST /api/consumos. Las alertas todavía no
-las crea ningún motor (HU-12), así que estas pruebas las insertan directo en la base de datos.
+Una "lectura" es el registro de consumo que se carga con POST /api/consumos. La edición reevalúa
+la lectura con el motor estadístico (DET-75); para preparar escenarios con una alerta previa las
+pruebas insertan filas directo en la base de datos.
 """
 from datetime import date, timedelta
 
 import pytest
 
-from backend.app.models import Alerta, Lectura, ServicioEnum, TipoAlertaEnum
+from backend.app.models import Alerta, EstadoAlertaEnum, Lectura, ServicioEnum, TipoAlertaEnum
 
 CONSUMOS = "/api/consumos"
 
@@ -54,6 +55,15 @@ def _historial(client, headers, inmueble_id, servicio="LUZ"):
     res = client.get(f"{CONSUMOS}/{inmueble_id}/historial", headers=headers)
     assert res.status_code == 200
     return res.json()[servicio]["lecturas"]
+
+
+def _lecturas_estables(client, headers, inmueble_id, cantidad=6, consumo=100.0):
+    """Carga `cantidad` meses consecutivos de 2025 con el mismo consumo (historial estable)."""
+    return [
+        _lectura(client, headers, inmueble_id, inicio=f"2025-{mes:02d}-01",
+                 fin=f"2025-{mes:02d}-28", consumo=consumo)
+        for mes in range(1, cantidad + 1)
+    ]
 
 
 @pytest.fixture()
@@ -298,6 +308,127 @@ def test_una_edicion_rechazada_no_toca_la_alerta(client, db, laura):
 
     db.expire_all()
     assert db.query(Alerta).filter(Alerta.id == alerta).first() is not None
+
+
+# ---------- DET-75: reevaluación de la lectura editada ----------
+def test_editar_reevalua_y_reemplaza_la_alerta_anterior_por_una_alta(client, db, laura):
+    """Criterio 2: la alerta vieja se reemplaza por el resultado nuevo de la lectura editada."""
+    headers, inmueble_id = laura
+    lecturas = _lecturas_estables(client, headers, inmueble_id)
+    editada = lecturas[0]
+    alerta_vieja = _con_alerta(db, editada["id"])
+
+    res = client.put(
+        f"{CONSUMOS}/{editada['id']}",
+        json=_datos(fecha_inicio=editada["fecha_inicio"], fecha_fin=editada["fecha_fin"], consumo=1200),
+        headers=headers,
+    )
+    assert res.status_code == 200
+
+    db.expire_all()
+    # Solo queda la alerta nueva: la vieja se reemplazó, no se sumó otra. (SQLite puede reutilizar
+    # el id de la fila borrada, así que se comparan los valores y no el id.)
+    assert db.query(Alerta).count() == 1
+    nueva = db.query(Alerta).filter(Alerta.lectura_id == editada["id"]).one()
+    assert nueva.tipo == TipoAlertaEnum.ALTA and nueva.estado == EstadoAlertaEnum.PENDIENTE
+    assert (nueva.desvio_porcentual, nueva.consumo_por_dia) != (40.0, 5.0)  # valores de la alerta vieja
+    # Referencia: los otros 5 meses estables (100 / 28 días).
+    assert nueva.consumo_habitual_por_dia == pytest.approx(100 / 28, rel=1e-3)
+    # La editada: 1200 / 28 días.
+    assert nueva.consumo_por_dia == pytest.approx(1200 / 28, rel=1e-3)
+    assert nueva.desvio_porcentual == pytest.approx(1100.0, rel=1e-3)
+    assert _historial(client, headers, inmueble_id)[0]["tiene_alerta"] is True
+
+
+def test_editar_a_un_consumo_muy_bajo_genera_alerta_baja(client, db, laura):
+    headers, inmueble_id = laura
+    lecturas = _lecturas_estables(client, headers, inmueble_id)
+    editada = lecturas[0]
+
+    res = client.put(
+        f"{CONSUMOS}/{editada['id']}",
+        json=_datos(fecha_inicio=editada["fecha_inicio"], fecha_fin=editada["fecha_fin"], consumo=0),
+        headers=headers,
+    )
+    assert res.status_code == 200
+
+    db.expire_all()
+    nueva = db.query(Alerta).filter(Alerta.lectura_id == editada["id"]).one()
+    assert nueva.tipo == TipoAlertaEnum.BAJA
+    assert nueva.desvio_porcentual == pytest.approx(-100.0, rel=1e-3)
+
+
+def test_editar_a_un_valor_normal_elimina_la_alerta_y_no_crea_otra(client, db, laura):
+    """Si el resultado nuevo es "sin alerta", la anterior se descarta y no queda ninguna."""
+    headers, inmueble_id = laura
+    lecturas = _lecturas_estables(client, headers, inmueble_id)
+    editada = lecturas[0]
+    alerta_vieja = _con_alerta(db, editada["id"])
+
+    res = client.put(
+        f"{CONSUMOS}/{editada['id']}",
+        json=_datos(fecha_inicio=editada["fecha_inicio"], fecha_fin=editada["fecha_fin"], consumo=105),
+        headers=headers,
+    )
+    assert res.status_code == 200
+
+    db.expire_all()
+    assert db.query(Alerta).filter(Alerta.id == alerta_vieja).first() is None
+    assert db.query(Alerta).filter(Alerta.lectura_id == editada["id"]).first() is None
+
+
+def test_editar_genera_la_alerta_sin_tocar_las_de_las_otras_lecturas(client, db, laura):
+    """RN-17: se reevalúa solo la editada; las alertas ya generadas de las demás no cambian."""
+    headers, inmueble_id = laura
+    lecturas = _lecturas_estables(client, headers, inmueble_id)
+    editada, vecina = lecturas[0], lecturas[1]
+    alerta_vecina = _con_alerta(db, vecina["id"])
+
+    client.put(
+        f"{CONSUMOS}/{editada['id']}",
+        json=_datos(fecha_inicio=editada["fecha_inicio"], fecha_fin=editada["fecha_fin"], consumo=1200),
+        headers=headers,
+    )
+
+    db.expire_all()
+    conservada = db.query(Alerta).filter(Alerta.id == alerta_vecina).one()
+    assert (conservada.lectura_id, conservada.tipo, conservada.estado) == (
+        vecina["id"], TipoAlertaEnum.ALTA, EstadoAlertaEnum.PENDIENTE,
+    )
+    assert db.query(Alerta).filter(Alerta.lectura_id == editada["id"]).count() == 1
+
+
+def test_editar_con_menos_de_6_lecturas_descarta_la_alerta_y_no_evalua(client, db, laura):
+    """RN-07: mientras el sistema está aprendiendo el patrón no se generan alertas nuevas."""
+    headers, inmueble_id = laura
+    lectura = _lectura(client, headers, inmueble_id)
+    alerta_vieja = _con_alerta(db, lectura["id"])
+
+    client.put(f"{CONSUMOS}/{lectura['id']}", json=_datos(consumo=9999), headers=headers)
+
+    db.expire_all()
+    assert db.query(Alerta).filter(Alerta.id == alerta_vieja).first() is None
+    assert db.query(Alerta).count() == 0
+
+
+def test_editar_sin_referencia_suficiente_tras_excluir_normales_no_genera_alerta(client, db, laura):
+    """RN-07 y RN-11: si tras excluir las "normal" quedan menos de 3 referencias, no se evalúa."""
+    headers, inmueble_id = laura
+    lecturas = _lecturas_estables(client, headers, inmueble_id)
+    editada = lecturas[0]
+
+    # Las otras 5 lecturas quedan fuera de la referencia salvo una: sólo 1 < 3.
+    for normal in lecturas[1:5]:
+        _con_alerta(db, normal["id"], EstadoAlertaEnum.NORMAL)
+
+    client.put(
+        f"{CONSUMOS}/{editada['id']}",
+        json=_datos(fecha_inicio=editada["fecha_inicio"], fecha_fin=editada["fecha_fin"], consumo=9999),
+        headers=headers,
+    )
+
+    db.expire_all()
+    assert db.query(Alerta).filter(Alerta.lectura_id == editada["id"]).first() is None
 
 
 # ======================================================================
