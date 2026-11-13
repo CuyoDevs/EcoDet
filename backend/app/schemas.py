@@ -197,6 +197,14 @@ class LecturaFilaIn(BaseModel):
         return v
 
 
+class LecturaEdicionIn(LecturaFilaIn):
+    """Cuerpo de PUT /api/consumos/{id} (HU-11 / DET-73).
+
+    Mismos campos y mismas validaciones que una lectura al cargarla (RN-03, RN-05): se heredan de
+    LecturaFilaIn para que la carga y la edición nunca se desalineen. El inmueble no se puede cambiar.
+    """
+
+
 class CargaLoteIn(BaseModel):
     inmueble_id: int
     lecturas: list[LecturaFilaIn]
