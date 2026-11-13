@@ -1,8 +1,10 @@
-// HistorialConsumos.jsx — HU-10 / DET-18
+// HistorialConsumos.jsx — HU-10 / DET-18 (+ HU-11: editar y eliminar lecturas)
 // Muestra el historial de lecturas de un inmueble agrupado por servicio,
 // con gráfico de línea (SVG), estadísticas y estado del detector.
 import React, { useEffect, useState } from 'react'
-import { obtenerHistorial } from '../api/consumos'
+import { obtenerHistorial, actualizarLectura, eliminarLectura } from '../api/consumos'
+import EditarLecturaModal from './EditarLecturaModal'
+import EliminarLecturaModal from './EliminarLecturaModal'
 
 const SERVICIOS = ['LUZ', 'GAS', 'AGUA']
 const UNIDADES = { LUZ: 'kWh', GAS: 'm³', AGUA: 'm³' }
@@ -91,8 +93,10 @@ function TooltipLectura({ lectura, unidad, onCerrar }) {
 }
 
 // ─── Panel de un servicio ─────────────────────────────────────────────────────
-function PanelServicio({ servicio, datos, onAbrirCarga }) {
-  const [seleccionada, setSeleccionada] = useState(null)
+function PanelServicio({ servicio, datos, onAbrirCarga, onEditar, onEliminar }) {
+  // Se guarda el id (no el objeto) para que el detalle no muestre datos viejos tras editar o eliminar.
+  const [seleccionadaId, setSeleccionadaId] = useState(null)
+  const seleccionada = datos.lecturas.find((l) => l.id === seleccionadaId) ?? null
   const unidad = UNIDADES[servicio]
   const color = COLORES[servicio]
   const { detector_activo, lecturas, estadisticas } = datos
@@ -139,7 +143,7 @@ function PanelServicio({ servicio, datos, onAbrirCarga }) {
       <GraficoLinea
         lecturas={lecturas}
         color={color}
-        onSeleccionar={setSeleccionada}
+        onSeleccionar={(l) => setSeleccionadaId(l.id)}
         seleccionada={seleccionada}
       />
 
@@ -147,7 +151,7 @@ function PanelServicio({ servicio, datos, onAbrirCarga }) {
       <TooltipLectura
         lectura={seleccionada}
         unidad={unidad}
-        onCerrar={() => setSeleccionada(null)}
+        onCerrar={() => setSeleccionadaId(null)}
       />
 
       {/* Estadísticas */}
@@ -170,7 +174,8 @@ function PanelServicio({ servicio, datos, onAbrirCarga }) {
             <tr className="border-b border-slate-100 text-slate-500">
               <th className="py-1 pr-2">Período</th>
               <th className="py-1 pr-2">Consumo</th>
-              <th className="py-1">Por día</th>
+              <th className="py-1 pr-2">Por día</th>
+              <th className="py-1">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -181,9 +186,27 @@ function PanelServicio({ servicio, datos, onAbrirCarga }) {
               >
                 <td className="py-1 pr-2">{l.fecha_inicio} — {l.fecha_fin}</td>
                 <td className="py-1 pr-2">{l.consumo} {unidad}</td>
-                <td className="py-1">
+                <td className="py-1 pr-2">
                   {l.consumo_por_dia} {unidad}
                   {l.tiene_alerta && <span className="ml-1 text-red-500">⚠</span>}
+                </td>
+                <td className="py-1 whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => onEditar(l)}
+                    aria-label={`Editar lectura ${l.fecha_inicio} al ${l.fecha_fin}`}
+                    className="mr-2 text-teal-600 underline hover:text-teal-800"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEliminar(l)}
+                    aria-label={`Eliminar lectura ${l.fecha_inicio} al ${l.fecha_fin}`}
+                    className="text-red-600 underline hover:text-red-800"
+                  >
+                    Eliminar
+                  </button>
                 </td>
               </tr>
             ))}
@@ -199,6 +222,13 @@ export default function HistorialConsumos({ inmuebleId, onAbrirCarga, onCerrar }
   const [estado, setEstado] = useState('cargando') // 'cargando' | 'ok' | 'error'
   const [historial, setHistorial] = useState(null)
   const [mensajeError, setMensajeError] = useState('')
+
+  // HU-11: lectura que se está editando / eliminando (null = ningún modal abierto)
+  const [editando, setEditando] = useState(null)
+  const [erroresEdicion, setErroresEdicion] = useState({})
+  const [eliminando, setEliminando] = useState(null)
+  const [errorEliminar, setErrorEliminar] = useState('')
+  const [enviando, setEnviando] = useState(false)
 
   useEffect(() => {
     let activo = true
@@ -218,6 +248,68 @@ export default function HistorialConsumos({ inmuebleId, onAbrirCarga, onCerrar }
       })
     return () => { activo = false }
   }, [inmuebleId])
+
+  // Vuelve a pedir el historial sin pasar por "Cargando…", para no cerrar los paneles abiertos.
+  const recargar = async () => {
+    try {
+      setHistorial(await obtenerHistorial(inmuebleId))
+    } catch (err) {
+      setMensajeError(err.message || 'Error al cargar el historial.')
+      setEstado('error')
+    }
+  }
+
+  const abrirEdicion = (lectura) => {
+    setErroresEdicion({})
+    setEditando(lectura)
+  }
+
+  const cerrarEdicion = () => {
+    setEditando(null)
+    setErroresEdicion({})
+  }
+
+  const guardarEdicion = async (datos) => {
+    setEnviando(true)
+    setErroresEdicion({})
+    try {
+      await actualizarLectura(editando.id, datos)
+      setEditando(null)
+      await recargar()
+    } catch (err) {
+      setErroresEdicion(
+        err.errores && Object.keys(err.errores).length > 0
+          ? err.errores
+          : { general: err.message || 'No se pudo guardar la lectura.' }
+      )
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const abrirEliminacion = (lectura) => {
+    setErrorEliminar('')
+    setEliminando(lectura)
+  }
+
+  const cerrarEliminacion = () => {
+    setEliminando(null)
+    setErrorEliminar('')
+  }
+
+  const confirmarEliminacion = async () => {
+    setEnviando(true)
+    setErrorEliminar('')
+    try {
+      await eliminarLectura(eliminando.id)
+      setEliminando(null)
+      await recargar()
+    } catch (err) {
+      setErrorEliminar(err.errores?.general || err.message || 'No se pudo eliminar la lectura.')
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   return (
     <section aria-label="Historial de consumos" className="space-y-4">
@@ -253,9 +345,32 @@ export default function HistorialConsumos({ inmuebleId, onAbrirCarga, onCerrar }
               servicio={srv}
               datos={historial[srv]}
               onAbrirCarga={onAbrirCarga}
+              onEditar={abrirEdicion}
+              onEliminar={abrirEliminacion}
             />
           ))}
         </div>
+      )}
+
+      {editando && (
+        <EditarLecturaModal
+          lectura={editando}
+          errores={erroresEdicion}
+          enviando={enviando}
+          onGuardar={guardarEdicion}
+          onCancelar={cerrarEdicion}
+        />
+      )}
+
+      {eliminando && (
+        <EliminarLecturaModal
+          lectura={eliminando}
+          unidad={UNIDADES[eliminando.servicio]}
+          error={errorEliminar}
+          enviando={enviando}
+          onConfirmar={confirmarEliminacion}
+          onCancelar={cerrarEliminacion}
+        />
       )}
     </section>
   )

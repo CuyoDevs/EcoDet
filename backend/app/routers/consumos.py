@@ -2,14 +2,14 @@
 Permite registrar consumos individuales y en lote asociados a un inmueble validando
 las reglas de negocio (RN-02, RN-03, RN-04, RN-05, RN-07, RN-14).
 """
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Lectura, Inmueble, Usuario, ServicioEnum
 from ..schemas import (
-    LecturaIn, LecturaOut, CargaLoteIn, CargaLoteOut,
+    LecturaIn, LecturaOut, LecturaEdicionIn, CargaLoteIn, CargaLoteOut,
     HistorialInmuebleOut, HistorialServicioOut, LecturaHistorialOut,
     EstadisticasServicio,
 )
@@ -187,6 +187,98 @@ def crear_lecturas_lote(
         "lecturas": nuevas_lecturas,
         "detector_activo_por_servicio": detector_activo
     }
+
+
+def _buscar_lectura_del_usuario(db: Session, lectura_id: int, usuario: Usuario) -> Lectura | None:
+    """Una lectura solo existe para el dueño de su inmueble (RN-01)."""
+    return (
+        db.query(Lectura)
+        .join(Inmueble, Lectura.inmueble_id == Inmueble.id)
+        .filter(Lectura.id == lectura_id, Inmueble.usuario_id == usuario.id)
+        .first()
+    )
+
+
+def _lectura_no_encontrada() -> JSONResponse:
+    # RN-01: la lectura de otro usuario responde igual que una inexistente.
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"errores": {"general": "Lectura no encontrada."}}
+    )
+
+
+@router.put("/{lectura_id}", response_model=LecturaOut)
+def actualizar_lectura(
+    lectura_id: int,
+    lectura_in: LecturaEdicionIn,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Edita una lectura de consumo del usuario autenticado (HU-11 / DET-73, CU-09).
+
+    Se valida igual que al cargarla (RN-03, RN-05: 422) y no puede superponerse con otra lectura
+    del mismo servicio e inmueble (RN-14: 409); la propia lectura no cuenta como superposición.
+    Cambia servicio, fechas y consumo; el inmueble no se puede cambiar.
+    La alerta anterior de la lectura se descarta porque ya no describe sus datos.
+    """
+    lectura = _buscar_lectura_del_usuario(db, lectura_id, usuario)
+    if not lectura:
+        return _lectura_no_encontrada()
+
+    # RN-14: sin superposición con OTRA lectura (por eso se excluye la propia).
+    superposicion = db.query(Lectura).filter(
+        Lectura.inmueble_id == lectura.inmueble_id,
+        Lectura.servicio == lectura_in.servicio,
+        Lectura.id != lectura.id,
+        Lectura.fecha_inicio <= lectura_in.fecha_fin,
+        Lectura.fecha_fin >= lectura_in.fecha_inicio
+    ).first()
+
+    if superposicion:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"errores": {"fecha_inicio": "El período ingresado se superpone con otra lectura existente para este servicio."}}
+        )
+
+    lectura.servicio = lectura_in.servicio
+    lectura.fecha_inicio = lectura_in.fecha_inicio
+    lectura.fecha_fin = lectura_in.fecha_fin
+    lectura.consumo = lectura_in.consumo
+
+    # La lectura cambió: su alerta anterior ya no es válida y se reemplaza por el resultado nuevo.
+    # Hoy ese resultado es "sin alerta" porque el motor de detección (HU-12 / CU-06) todavía no está:
+    # cuando exista, acá se vuelve a evaluar SOLO esta lectura (RN-17: las demás no se recalculan).
+    lectura.alerta = None  # delete-orphan borra la fila de alertas
+
+    db.commit()
+    db.refresh(lectura)
+
+    return lectura
+
+
+@router.delete("/{lectura_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def eliminar_lectura(
+    lectura_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Elimina una lectura del usuario autenticado junto con su alerta (HU-11 / DET-74, CU-09).
+    Responde 204 sin cuerpo. La confirmación ("se borra la lectura y su alerta") la pide el frontend.
+
+    El borrado de la alerta lo hace el ORM (`cascade="all, delete-orphan"` en `Lectura.alerta`): no
+    depende de que SQLite tenga activadas las claves foráneas, por eso se usa `db.delete()`.
+    No toca otras lecturas ni sus alertas (RN-17), y libera el período para volver a cargarlo.
+    """
+    lectura = _buscar_lectura_del_usuario(db, lectura_id, usuario)
+    if not lectura:
+        return _lectura_no_encontrada()
+
+    db.delete(lectura)
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _calcular_estadisticas(lecturas_ord: list) -> dict | None:
