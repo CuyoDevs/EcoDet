@@ -298,3 +298,149 @@ def test_una_edicion_rechazada_no_toca_la_alerta(client, db, laura):
 
     db.expire_all()
     assert db.query(Alerta).filter(Alerta.id == alerta).first() is not None
+
+
+# ======================================================================
+# DET-74 · DELETE /api/consumos/{id}
+# ======================================================================
+def test_eliminar_sin_token_da_401(client):
+    assert client.delete(f"{CONSUMOS}/1").status_code == 401
+
+
+def test_eliminar_da_204_sin_cuerpo_y_la_lectura_desaparece_del_historial(client, db, laura):
+    """Criterio 3: al confirmar, la lectura desaparece del historial."""
+    headers, inmueble_id = laura
+    lectura = _lectura(client, headers, inmueble_id)
+    assert len(_historial(client, headers, inmueble_id)) == 1
+
+    res = client.delete(f"{CONSUMOS}/{lectura['id']}", headers=headers)
+
+    assert res.status_code == 204
+    assert res.content == b""
+    assert _historial(client, headers, inmueble_id) == []
+    assert db.query(Lectura).count() == 0
+
+
+def test_eliminar_tambien_elimina_su_alerta(client, db, laura):
+    """Criterio 3: desaparece del historial JUNTO CON su alerta."""
+    headers, inmueble_id = laura
+    lectura = _lectura(client, headers, inmueble_id)
+    _con_alerta(db, lectura["id"])
+    assert db.query(Alerta).count() == 1
+
+    assert client.delete(f"{CONSUMOS}/{lectura['id']}", headers=headers).status_code == 204
+
+    db.expire_all()
+    assert db.query(Alerta).count() == 0
+
+
+def test_eliminar_borra_la_alerta_en_cualquier_estado(client, db, laura):
+    from backend.app.models import EstadoAlertaEnum
+    headers, inmueble_id = laura
+    for estado, mes in ((EstadoAlertaEnum.CONFIRMADA, "01"), (EstadoAlertaEnum.NORMAL, "02")):
+        lectura = _lectura(client, headers, inmueble_id, inicio=f"2025-{mes}-01", fin=f"2025-{mes}-28")
+        _con_alerta(db, lectura["id"], estado)
+    for l in _historial(client, headers, inmueble_id):
+        assert client.delete(f"{CONSUMOS}/{l['id']}", headers=headers).status_code == 204
+    db.expire_all()
+    assert db.query(Alerta).count() == 0
+
+
+def test_eliminar_una_lectura_sin_alerta_funciona(client, db, laura):
+    headers, inmueble_id = laura
+    lectura = _lectura(client, headers, inmueble_id)
+    assert db.query(Alerta).count() == 0
+    assert client.delete(f"{CONSUMOS}/{lectura['id']}", headers=headers).status_code == 204
+
+
+def test_eliminar_no_toca_las_otras_lecturas_ni_sus_alertas(client, db, laura):
+    """RN-17: borrar una lectura no recalcula ni borra nada de las demás."""
+    headers, inmueble_id = laura
+    borrada = _lectura(client, headers, inmueble_id, inicio="2025-01-01", fin="2025-01-31")
+    vecina = _lectura(client, headers, inmueble_id, inicio="2025-02-01", fin="2025-02-28", consumo=500)
+    _con_alerta(db, borrada["id"])
+    alerta_vecina = _con_alerta(db, vecina["id"])
+
+    client.delete(f"{CONSUMOS}/{borrada['id']}", headers=headers)
+
+    db.expire_all()
+    assert [l.id for l in db.query(Lectura).all()] == [vecina["id"]]
+    conservada = db.query(Alerta).one()
+    assert (conservada.id, conservada.lectura_id, conservada.desvio_porcentual) == (alerta_vecina, vecina["id"], 40.0)
+    assert _historial(client, headers, inmueble_id)[0]["tiene_alerta"] is True
+
+
+def test_eliminar_no_toca_lecturas_de_otros_inmuebles_ni_de_otros_usuarios(client, db, laura):
+    headers, inmueble_id = laura
+    otro_inmueble = _inmueble(client, headers, "Depto")
+    de_laura = _lectura(client, headers, otro_inmueble)
+    carlos = _headers(client, "carlos@eco.com")
+    de_carlos = _lectura(client, carlos, _inmueble(client, carlos, "Casa de Carlos"))
+    mia = _lectura(client, headers, inmueble_id)
+
+    client.delete(f"{CONSUMOS}/{mia['id']}", headers=headers)
+
+    db.expire_all()
+    assert sorted(l.id for l in db.query(Lectura).all()) == sorted([de_laura["id"], de_carlos["id"]])
+
+
+# ---------- recursos inexistentes y aislamiento (RN-01) ----------
+def test_eliminar_una_lectura_inexistente_da_404(client, laura):
+    headers, _ = laura
+    res = client.delete(f"{CONSUMOS}/99999", headers=headers)
+    assert res.status_code == 404
+    assert res.json() == {"errores": {"general": "Lectura no encontrada."}}
+
+
+def test_eliminar_dos_veces_la_misma_lectura_da_404_la_segunda(client, laura):
+    headers, inmueble_id = laura
+    lectura = _lectura(client, headers, inmueble_id)
+    assert client.delete(f"{CONSUMOS}/{lectura['id']}", headers=headers).status_code == 204
+    assert client.delete(f"{CONSUMOS}/{lectura['id']}", headers=headers).status_code == 404
+
+
+def test_eliminar_la_lectura_de_otro_usuario_da_404_y_no_la_borra(client, db, laura):
+    headers, inmueble_id = laura
+    lectura = _lectura(client, headers, inmueble_id)
+    _con_alerta(db, lectura["id"])
+    carlos = _headers(client, "carlos@eco.com")
+
+    res = client.delete(f"{CONSUMOS}/{lectura['id']}", headers=carlos)
+
+    assert res.status_code == 404
+    assert res.json() == client.delete(f"{CONSUMOS}/99999", headers=carlos).json()  # igual que inexistente
+    db.expire_all()
+    assert db.query(Lectura).count() == 1 and db.query(Alerta).count() == 1
+    assert len(_historial(client, headers, inmueble_id)) == 1
+
+
+def test_un_id_que_no_es_numero_en_delete_da_422(client, laura):
+    headers, _ = laura
+    assert client.delete(f"{CONSUMOS}/abc", headers=headers).status_code == 422
+
+
+# ---------- efectos visibles después de eliminar ----------
+def test_tras_eliminar_el_periodo_queda_libre_para_volver_a_cargarlo(client, laura):
+    """Caso de uso de HU-11: borrar una lectura cargada mal y cargarla bien."""
+    headers, inmueble_id = laura
+    mala = _lectura(client, headers, inmueble_id, consumo=9999)
+    client.delete(f"{CONSUMOS}/{mala['id']}", headers=headers)
+
+    nueva = client.post(CONSUMOS, json={"inmueble_id": inmueble_id, **_datos(consumo=100)}, headers=headers)
+
+    assert nueva.status_code == 201
+    assert [l["consumo"] for l in _historial(client, headers, inmueble_id)] == [100.0]
+
+
+def test_eliminar_puede_desactivar_el_detector_por_el_minimo_de_lecturas(client, laura):
+    """RN-07: con menos de 6 lecturas el detector no está activo; eliminar una lo puede apagar."""
+    headers, inmueble_id = laura
+    ids = [_lectura(client, headers, inmueble_id, inicio=f"2025-{m:02d}-01", fin=f"2025-{m:02d}-28")["id"]
+           for m in range(1, 7)]
+    hist = client.get(f"{CONSUMOS}/{inmueble_id}/historial", headers=headers).json()
+    assert hist["LUZ"]["detector_activo"] is True
+
+    client.delete(f"{CONSUMOS}/{ids[0]}", headers=headers)
+
+    hist = client.get(f"{CONSUMOS}/{inmueble_id}/historial", headers=headers).json()
+    assert hist["LUZ"]["detector_activo"] is False and len(hist["LUZ"]["lecturas"]) == 5

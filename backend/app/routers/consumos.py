@@ -2,7 +2,7 @@
 Permite registrar consumos individuales y en lote asociados a un inmueble validando
 las reglas de negocio (RN-02, RN-03, RN-04, RN-05, RN-07, RN-14).
 """
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -255,6 +255,30 @@ def actualizar_lectura(
     db.refresh(lectura)
 
     return lectura
+
+
+@router.delete("/{lectura_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def eliminar_lectura(
+    lectura_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    """
+    Elimina una lectura del usuario autenticado junto con su alerta (HU-11 / DET-74, CU-09).
+    Responde 204 sin cuerpo. La confirmación ("se borra la lectura y su alerta") la pide el frontend.
+
+    El borrado de la alerta lo hace el ORM (`cascade="all, delete-orphan"` en `Lectura.alerta`): no
+    depende de que SQLite tenga activadas las claves foráneas, por eso se usa `db.delete()`.
+    No toca otras lecturas ni sus alertas (RN-17), y libera el período para volver a cargarlo.
+    """
+    lectura = _buscar_lectura_del_usuario(db, lectura_id, usuario)
+    if not lectura:
+        return _lectura_no_encontrada()
+
+    db.delete(lectura)
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _calcular_estadisticas(lecturas_ord: list) -> dict | None:
