@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react'
 import { obtenerHistorial, actualizarLectura, eliminarLectura } from '../api/consumos'
 import EditarLecturaModal from './EditarLecturaModal'
 import EliminarLecturaModal from './EliminarLecturaModal'
+import ProgresoAprendizaje from './ProgresoAprendizaje'
 
 const SERVICIOS = ['LUZ', 'GAS', 'AGUA']
 const UNIDADES = { LUZ: 'kWh', GAS: 'm³', AGUA: 'm³' }
@@ -138,6 +139,11 @@ function PanelServicio({ servicio, datos, onAbrirCarga, onEditar, onEliminar }) 
           {detector_activo ? '🟢 Detector activo' : '⚪ Detector inactivo'}
         </span>
       </div>
+
+      {/* HU-14: mientras el detector no se active, cuánto le falta para aprender */}
+      {!detector_activo && (
+        <ProgresoAprendizaje registradas={lecturas.length} faltantes={datos.lecturas_faltantes} />
+      )}
 
       {/* Gráfico */}
       <GraficoLinea
