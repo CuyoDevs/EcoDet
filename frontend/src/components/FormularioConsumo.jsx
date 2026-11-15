@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { crearLecturaConsumo, crearLecturasLote } from '../api/consumos'
 import CampoFormulario from './CampoFormulario'
+import AvisoAprendizaje from './AvisoAprendizaje'
+import { MENSAJE_APRENDIENDO, textoLecturasFaltantes } from '../utils/aprendizaje'
 import { Zap, Flame, Droplets, CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 
 const UNIDADES = {
@@ -30,6 +32,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
   const [errores, setErrores] = useState({})
   const [mensajeExito, setMensajeExito] = useState('')
   const [resumenLote, setResumenLote] = useState(null)
+  const [avisoAprendizaje, setAvisoAprendizaje] = useState(null) // { servicio, evaluacion } de la última lectura (HU-14)
   const [errorGeneral, setErrorGeneral] = useState('')
   const [cargando, setCargando] = useState(false)
 
@@ -61,6 +64,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     setErrores({})
     setMensajeExito('')
     setResumenLote(null)
+    setAvisoAprendizaje(null)
     setErrorGeneral('')
 
     try {
@@ -74,6 +78,10 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
 
       const nuevaLectura = await crearLecturaConsumo(payload)
       setMensajeExito('¡Lectura registrada con éxito!')
+      // HU-14: mientras el servicio tenga menos lecturas que el mínimo, se explica por qué no hay alertas.
+      if (nuevaLectura?.evaluacion?.estado === 'aprendiendo') {
+        setAvisoAprendizaje({ servicio: payload.servicio, evaluacion: nuevaLectura.evaluacion })
+      }
       setFormData((prev) => ({
         ...prev,
         fecha_inicio: '',
@@ -127,6 +135,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     setErrores({})
     setMensajeExito('')
     setResumenLote(null)
+    setAvisoAprendizaje(null)
     setErrorGeneral('')
 
     // Validación local de campos vacíos en el lote
@@ -195,7 +204,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
           <button
             type="button"
-            onClick={() => { setModo('individual'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); }}
+            onClick={() => { setModo('individual'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); setAvisoAprendizaje(null); }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
               modo === 'individual'
                 ? 'bg-white text-teal-700 shadow-sm'
@@ -206,7 +215,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
           </button>
           <button
             type="button"
-            onClick={() => { setModo('lote'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); }}
+            onClick={() => { setModo('lote'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); setAvisoAprendizaje(null); }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
               modo === 'lote'
                 ? 'bg-white text-teal-700 shadow-sm'
@@ -225,13 +234,28 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         </div>
       )}
 
+      {avisoAprendizaje && <AvisoAprendizaje {...avisoAprendizaje} />}
+
       {resumenLote && (
         <div className="p-4 mb-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1">
           <p className="font-semibold text-slate-800">Estado del detector tras la carga:</p>
           <ul className="list-disc list-inside space-y-0.5">
-            <li>Luz: {resumenLote.detector_activo_por_servicio.LUZ ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Aprendiendo patrón</span>}</li>
-            <li>Gas: {resumenLote.detector_activo_por_servicio.GAS ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Aprendiendo patrón</span>}</li>
-            <li>Agua: {resumenLote.detector_activo_por_servicio.AGUA ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Sin datos suficientes</span>}</li>
+            {[['LUZ', 'Luz'], ['GAS', 'Gas'], ['AGUA', 'Agua']].map(([clave, nombre]) => {
+              const faltan = resumenLote.lecturas_faltantes_por_servicio?.[clave] ?? 0
+              return (
+                <li key={clave}>
+                  {nombre}:{' '}
+                  {resumenLote.detector_activo_por_servicio[clave] ? (
+                    <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span>
+                  ) : (
+                    <span className="text-slate-500">
+                      {MENSAJE_APRENDIENDO}
+                      {faltan > 0 && ` ${textoLecturasFaltantes(faltan)} para empezar a evaluar.`}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
