@@ -6,7 +6,7 @@ tal cual en el formulario del frontend.
 """
 import re
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Formato razonable de correo (sin depender de librerías extra).
 _CORREO_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$")
@@ -170,6 +170,10 @@ class EvaluacionOut(BaseModel):
     `estado` es "aprendiendo" mientras el servicio no tenga 6 lecturas (o la
     referencia útil quede en menos de 3), y si no "dentro", "alta" o "baja".
     Los campos de promedio, desvío y límites vienen vacíos en "aprendiendo".
+
+    HU-14 / DET-92: `lecturas_registradas` es cuántas lecturas tiene el servicio en el inmueble y
+    `lecturas_faltantes` cuántas más hacen falta para que el detector pueda evaluar (0 si ya evalúa).
+    El mínimo sale de backend/config.json (RN-07): el frontend no debe fijarlo a mano.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -184,6 +188,8 @@ class EvaluacionOut(BaseModel):
     limite_superior: float | None = None
     cantidad_referencia: int = 0
     referencia_estacional: bool = False
+    lecturas_registradas: int = 0
+    lecturas_faltantes: int = 0
 
 
 class LecturaCreadaOut(LecturaOut):
@@ -256,6 +262,8 @@ class CargaLoteOut(BaseModel):
     cantidad_cargadas: int
     lecturas: list[LecturaLoteOut]
     detector_activo_por_servicio: dict[str, bool]
+    # HU-14: cuántas lecturas más necesita cada servicio para que el detector se active (0 si ya está activo).
+    lecturas_faltantes_por_servicio: dict[str, int] = Field(default_factory=dict)
 
 
 # --- Esquemas para Historial y Gráficos (HU-10 / DET-18) ---
@@ -284,6 +292,8 @@ class EstadisticasServicio(BaseModel):
 class HistorialServicioOut(BaseModel):
     """Historial completo de un servicio: lecturas ordenadas + estadísticas."""
     detector_activo: bool
+    # HU-14: lecturas que faltan para que el detector se active (0 si ya lo está); sirve para el indicador de progreso.
+    lecturas_faltantes: int = 0
     lecturas: list[LecturaHistorialOut]
     estadisticas: EstadisticasServicio | None
 

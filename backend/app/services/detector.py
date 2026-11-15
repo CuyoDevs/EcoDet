@@ -69,6 +69,9 @@ class ResultadoEvaluacion:
     cantidad_referencia: int = 0
     referencia_estacional: bool = False
     motivo: str | None = None
+    # HU-14: cuántas lecturas tiene el servicio y cuántas más hacen falta para que el detector evalúe.
+    lecturas_registradas: int = 0
+    lecturas_faltantes: int = 0
 
 
 def consumo_por_dia(consumo: float, fecha_inicio: date, fecha_fin: date) -> float:
@@ -185,12 +188,19 @@ def clasificar(
     return EstadoEvaluacion.DENTRO
 
 
+def lecturas_faltantes_para_activar(total_lecturas: int) -> int:
+    """RN-07: cuántas lecturas más necesita un servicio para llegar al mínimo (0 si ya lo alcanzó)."""
+    return max(0, detector_config.minimo_de_lecturas - total_lecturas)
+
+
 def _resultado_aprendiendo(
     lectura: Lectura,
     umbral: float,
     motivo: str,
     referencia_estacional: bool = False,
     cantidad_referencia: int = 0,
+    lecturas_registradas: int = 0,
+    lecturas_faltantes: int = 0,
 ) -> ResultadoEvaluacion:
     return ResultadoEvaluacion(
         estado=EstadoEvaluacion.APRENDIENDO,
@@ -199,6 +209,8 @@ def _resultado_aprendiendo(
         cantidad_referencia=cantidad_referencia,
         referencia_estacional=referencia_estacional,
         motivo=motivo,
+        lecturas_registradas=lecturas_registradas,
+        lecturas_faltantes=lecturas_faltantes,
     )
 
 
@@ -223,9 +235,17 @@ def evaluar_lectura(db: Session, lectura: Lectura) -> ResultadoEvaluacion:
 
     umbral = umbral_vigente(db, lectura.inmueble_id, lectura.servicio)
 
+    registradas = len(lecturas)
+
     # RN-07: con menos lecturas el sistema todavía está aprendiendo el patrón.
-    if len(lecturas) < detector_config.minimo_de_lecturas:
-        return _resultado_aprendiendo(lectura, umbral, "lecturas_insuficientes")
+    if registradas < detector_config.minimo_de_lecturas:
+        return _resultado_aprendiendo(
+            lectura,
+            umbral,
+            "lecturas_insuficientes",
+            lecturas_registradas=registradas,
+            lecturas_faltantes=lecturas_faltantes_para_activar(registradas),
+        )
 
     referencia, estacional = seleccionar_referencia(lecturas, lectura)
 
@@ -237,6 +257,9 @@ def evaluar_lectura(db: Session, lectura: Lectura) -> ResultadoEvaluacion:
             "referencia_insuficiente",
             referencia_estacional=estacional,
             cantidad_referencia=len(referencia),
+            lecturas_registradas=registradas,
+            # Hay lecturas de sobra, pero las que sirven de referencia no alcanzan: faltan las que completan 3.
+            lecturas_faltantes=MINIMO_REFERENCIA - len(referencia),
         )
 
     consumos = [otra.consumo_por_dia for otra in referencia]
@@ -255,6 +278,7 @@ def evaluar_lectura(db: Session, lectura: Lectura) -> ResultadoEvaluacion:
         limite_superior=limite_superior,
         cantidad_referencia=len(referencia),
         referencia_estacional=estacional,
+        lecturas_registradas=registradas,
     )
 
 

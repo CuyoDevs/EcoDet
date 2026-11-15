@@ -15,7 +15,9 @@ from ..schemas import (
 )
 from ..dependencies import get_current_user
 from ..config import detector_config
-from ..services.detector import evaluar_lectura, reemplazar_alerta_de_lectura
+from ..services.detector import (
+    evaluar_lectura, lecturas_faltantes_para_activar, reemplazar_alerta_de_lectura,
+)
 
 router = APIRouter(prefix="/api/consumos", tags=["consumos"])
 
@@ -225,18 +227,21 @@ def crear_lecturas_lote(
     # 5. Calcular si el detector queda activo por servicio (RN-07: >= 6 lecturas en total)
     minimo_lecturas = detector_config.minimo_de_lecturas
     detector_activo = {}
+    lecturas_faltantes = {}
     for srv in [ServicioEnum.LUZ, ServicioEnum.GAS, ServicioEnum.AGUA]:
         total_servicio = db.query(Lectura).filter(
             Lectura.inmueble_id == lote_in.inmueble_id,
             Lectura.servicio == srv
         ).count()
         detector_activo[srv.value] = total_servicio >= minimo_lecturas
+        lecturas_faltantes[srv.value] = lecturas_faltantes_para_activar(total_servicio)
 
     return CargaLoteOut(
         inmueble_id=lote_in.inmueble_id,
         cantidad_cargadas=len(nuevas_lecturas),
         lecturas=lecturas_out,
         detector_activo_por_servicio=detector_activo,
+        lecturas_faltantes_por_servicio=lecturas_faltantes,
     )
 
 
@@ -409,6 +414,7 @@ def obtener_historial(
 
         resultado[srv.value] = HistorialServicioOut(
             detector_activo=detector_activo,
+            lecturas_faltantes=lecturas_faltantes_para_activar(len(lecturas_db)),
             lecturas=lecturas_out,
             estadisticas=estadisticas,
         )
