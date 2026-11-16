@@ -4,6 +4,8 @@ import { useSesionVerificada } from '../auth/useSesionVerificada'
 import AccesoPage from '../pages/AccesoPage'
 import PanelInmuebles from '../pages/PanelInmuebles'
 import { irA, useRutaHash } from './hashRouter'
+import PanelAlertas from '../components/PanelAlertas';
+
 
 export const RUTA_ACCESO = '/acceso' // pública: vista W1 (login y registro)
 export const RUTA_PANEL = '/inmuebles' // privada: panel W2 y todo lo que cuelgue de /inmuebles
@@ -46,3 +48,4 @@ export default function Rutas() {
   if (destino) return null // redirigiendo: no se muestra nada privado ni un parpadeo del formulario
   return estaAutenticado ? <PanelInmuebles /> : <AccesoPage />
 }
+

@@ -95,3 +95,7 @@ def health_check(db: Session = Depends(get_db)):
         },
         "environment": settings.ENVIRONMENT
     }
+from .routers import alertas
+
+# Asegúrate de agregarlo junto a los otros include_router:
+app.include_router(alertas.router)
