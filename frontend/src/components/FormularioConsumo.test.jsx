@@ -97,4 +97,117 @@ describe('FormularioConsumo (HU-08 / DET-16 y HU-09 / DET-17)', () => {
       expect(screen.getByText('La fila 2 se superpone con la fila 1.')).toBeInTheDocument()
     })
   })
+
+  it('muestra advertencia inmediata al cargar una lectura con alerta de consumo alto (HU-13 / DET-88)', async () => {
+    consumosApi.crearLecturaConsumo.mockResolvedValueOnce({
+      id: 99,
+      inmueble_id: 1,
+      servicio: 'LUZ',
+      fecha_inicio: '2025-01-06',
+      fecha_fin: '2025-01-06',
+      consumo: 31,
+      evaluacion: {
+        estado: 'alta',
+        alerta_generada: true,
+        desvio_porcentual: 55.0,
+        mensaje: 'Consumo alto detectado: un 55.0% superior a lo habitual para este servicio.',
+        consumo_por_dia: 31.0,
+        promedio: 20.0
+      },
+      alerta: {
+        id: 10,
+        lectura_id: 99,
+        tipo: 'ALTA',
+        estado: 'PENDIENTE',
+        desvio_porcentual: 55.0
+      }
+    })
+
+    render(<FormularioConsumo inmuebleId={1} />)
+
+    fireEvent.change(screen.getByLabelText(/Fecha de inicio/i), { target: { value: '2025-01-06' } })
+    fireEvent.change(screen.getByLabelText(/Fecha de fin/i), { target: { value: '2025-01-06' } })
+    fireEvent.change(screen.getByLabelText(/Consumo \(kWh\)/i), { target: { value: '31' } })
+
+    fireEvent.click(screen.getByText('Registrar consumo'))
+
+    await waitFor(() => {
+      expect(screen.getByText('¡Alerta de Consumo Alto!')).toBeInTheDocument()
+      expect(screen.getByText('+55%')).toBeInTheDocument()
+      expect(screen.getByText(/Consumo alto detectado/i)).toBeInTheDocument()
+      expect(screen.getByText(/31 \/día/i)).toBeInTheDocument()
+      expect(screen.getByText(/20 \/día/i)).toBeInTheDocument()
+    })
+  })
+
+  it('muestra advertencia inmediata al cargar una lectura con alerta de consumo bajo (HU-13 / DET-88)', async () => {
+    consumosApi.crearLecturaConsumo.mockResolvedValueOnce({
+      id: 100,
+      inmueble_id: 1,
+      servicio: 'LUZ',
+      fecha_inicio: '2025-01-06',
+      fecha_fin: '2025-01-06',
+      consumo: 10,
+      evaluacion: {
+        estado: 'baja',
+        alerta_generada: true,
+        desvio_porcentual: -50.0,
+        mensaje: 'Consumo bajo inusual detectado: un 50.0% inferior a lo habitual para este servicio.',
+        consumo_por_dia: 10.0,
+        promedio: 20.0
+      },
+      alerta: {
+        id: 11,
+        lectura_id: 100,
+        tipo: 'BAJA',
+        estado: 'PENDIENTE',
+        desvio_porcentual: -50.0
+      }
+    })
+
+    render(<FormularioConsumo inmuebleId={1} />)
+
+    fireEvent.change(screen.getByLabelText(/Fecha de inicio/i), { target: { value: '2025-01-06' } })
+    fireEvent.change(screen.getByLabelText(/Fecha de fin/i), { target: { value: '2025-01-06' } })
+    fireEvent.change(screen.getByLabelText(/Consumo \(kWh\)/i), { target: { value: '10' } })
+
+    fireEvent.click(screen.getByText('Registrar consumo'))
+
+    await waitFor(() => {
+      expect(screen.getByText('¡Alerta de Consumo Bajo Inusual!')).toBeInTheDocument()
+      expect(screen.getByText('-50%')).toBeInTheDocument()
+      expect(screen.getByText(/Consumo bajo inusual detectado/i)).toBeInTheDocument()
+    })
+  })
+
+  it('no muestra advertencia cuando el consumo está dentro de los límites (HU-13)', async () => {
+    consumosApi.crearLecturaConsumo.mockResolvedValueOnce({
+      id: 101,
+      inmueble_id: 1,
+      servicio: 'LUZ',
+      fecha_inicio: '2025-01-06',
+      fecha_fin: '2025-01-06',
+      consumo: 20,
+      evaluacion: {
+        estado: 'dentro',
+        alerta_generada: false,
+        desvio_porcentual: 0.0,
+        mensaje: 'Consumo dentro de los parámetros habituales.'
+      },
+      alerta: null
+    })
+
+    render(<FormularioConsumo inmuebleId={1} />)
+
+    fireEvent.change(screen.getByLabelText(/Fecha de inicio/i), { target: { value: '2025-01-06' } })
+    fireEvent.change(screen.getByLabelText(/Fecha de fin/i), { target: { value: '2025-01-06' } })
+    fireEvent.change(screen.getByLabelText(/Consumo \(kWh\)/i), { target: { value: '20' } })
+
+    fireEvent.click(screen.getByText('Registrar consumo'))
+
+    await waitFor(() => {
+      expect(screen.getByText('¡Lectura registrada con éxito!')).toBeInTheDocument()
+      expect(screen.queryByText(/¡Alerta de Consumo/i)).not.toBeInTheDocument()
+    })
+  })
 })

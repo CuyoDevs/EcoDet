@@ -7,15 +7,19 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Lectura, Inmueble, Usuario, ServicioEnum
+from ..models import Lectura, Inmueble, Usuario, ServicioEnum, Alerta
 from ..schemas import (
     LecturaIn, LecturaOut, LecturaEdicionIn, CargaLoteIn, CargaLoteOut,
     HistorialInmuebleOut, HistorialServicioOut, LecturaHistorialOut,
     EstadisticasServicio, EvaluacionOut, LecturaCreadaOut, LecturaLoteOut,
+    AlertaOut,
 )
 from ..dependencies import get_current_user
 from ..config import detector_config
-from ..services.detector import evaluar_lectura, reemplazar_alerta_de_lectura
+from ..services.detector import (
+    evaluar_lectura, reemplazar_alerta_de_lectura,
+    alerta_desde_resultado, EstadoEvaluacion, ResultadoEvaluacion,
+)
 
 router = APIRouter(prefix="/api/consumos", tags=["consumos"])
 
@@ -32,9 +36,43 @@ def _datos_lectura(lectura: Lectura) -> dict:
     }
 
 
-def _evaluacion_out(resultado) -> EvaluacionOut:
-    """Convierte el resultado del detector al esquema que expone la API."""
-    return EvaluacionOut.model_validate(resultado)
+def _evaluacion_out(resultado: ResultadoEvaluacion) -> EvaluacionOut:
+    """Convierte el resultado del detector al esquema que expone la API (HU-12, HU-13 / DET-87)."""
+    desvio = None
+    mensaje = None
+    alerta_generada = False
+
+    if resultado.promedio and resultado.promedio > 0:
+        desvio = round(((resultado.consumo_por_dia - resultado.promedio) / resultado.promedio) * 100, 2)
+
+    if resultado.estado == EstadoEvaluacion.ALTA:
+        alerta_generada = True
+        pct = abs(desvio) if desvio is not None else 0.0
+        mensaje = f"Consumo alto detectado: un {pct:.1f}% superior a lo habitual para este servicio."
+    elif resultado.estado == EstadoEvaluacion.BAJA:
+        alerta_generada = True
+        pct = abs(desvio) if desvio is not None else 0.0
+        mensaje = f"Consumo bajo inusual detectado: un {pct:.1f}% inferior a lo habitual para este servicio."
+    elif resultado.estado == EstadoEvaluacion.DENTRO:
+        mensaje = "Consumo dentro de los parámetros habituales."
+    elif resultado.estado == EstadoEvaluacion.APRENDIENDO:
+        mensaje = "El detector continúa aprendiendo los patrones de consumo."
+
+    return EvaluacionOut(
+        estado=resultado.estado.value if hasattr(resultado.estado, "value") else str(resultado.estado),
+        consumo_por_dia=resultado.consumo_por_dia,
+        umbral=resultado.umbral,
+        motivo=resultado.motivo,
+        promedio=resultado.promedio,
+        desvio_efectivo=resultado.desvio_efectivo,
+        limite_inferior=resultado.limite_inferior,
+        limite_superior=resultado.limite_superior,
+        cantidad_referencia=resultado.cantidad_referencia,
+        referencia_estacional=resultado.referencia_estacional,
+        desvio_porcentual=desvio,
+        mensaje=mensaje,
+        alerta_generada=alerta_generada,
+    )
 
 
 @router.post("", response_model=LecturaCreadaOut, status_code=status.HTTP_201_CREATED)
@@ -47,7 +85,7 @@ def crear_lectura(
     Registra una nueva lectura de consumo para un inmueble del usuario autenticado (DET-16).
 
     Después de guardarla la evalúa contra el historial del servicio (HU-12 / DET-83) y
-    devuelve el resultado junto con la lectura. No crea la alerta: eso lo hará HU-13.
+    si detecta anomalía (alta o baja), genera y persiste la alerta en estado PENDIENTE (HU-13 / DET-86, DET-87).
     """
     # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado (RN-01)
     inmueble = db.query(Inmueble).filter(
@@ -88,16 +126,23 @@ def crear_lectura(
     # Flush para que la lectura tenga id y quede visible en la consulta de la evaluación.
     db.flush()
 
-    # 4. Evaluar contra el historial del mismo servicio (HU-12 / DET-83).
-    #    El resultado se devuelve, pero no se persiste ninguna alerta: eso es de HU-13.
+    # 4. Evaluar contra el historial del mismo servicio (HU-12 / DET-83, HU-13 / DET-86).
     resultado = evaluar_lectura(db, nueva_lectura)
+    alerta = None
+    if resultado.estado in (EstadoEvaluacion.ALTA, EstadoEvaluacion.BAJA):
+        alerta = alerta_desde_resultado(nueva_lectura, resultado)
+        if alerta:
+            db.add(alerta)
 
     db.commit()
     db.refresh(nueva_lectura)
+    if alerta:
+        db.refresh(alerta)
 
     return LecturaCreadaOut(
         **_datos_lectura(nueva_lectura),
         evaluacion=_evaluacion_out(resultado),
+        alerta=AlertaOut.model_validate(alerta) if alerta else None,
     )
 
 
@@ -199,9 +244,15 @@ def crear_lecturas_lote(
         # Flush para que todas las filas tengan id y se vean entre sí en la evaluación:
         # cada lectura del lote se compara con las demás del servicio, incluidas las del lote.
         db.flush()
-        evaluaciones = [
-            (lectura, evaluar_lectura(db, lectura)) for lectura in nuevas_lecturas
-        ]
+        evaluaciones = []
+        for lectura in nuevas_lecturas:
+            res = evaluar_lectura(db, lectura)
+            alerta = None
+            if res.estado in (EstadoEvaluacion.ALTA, EstadoEvaluacion.BAJA):
+                alerta = alerta_desde_resultado(lectura, res)
+                if alerta:
+                    db.add(alerta)
+            evaluaciones.append((lectura, res, alerta))
 
         db.commit()
     except Exception as e:
@@ -211,14 +262,17 @@ def crear_lecturas_lote(
             content={"mensaje": f"Error al persistir el lote: {str(e)}"}
         )
 
-    # Refrescar instancias guardadas y armar la respuesta con su evaluación
+    # Refrescar instancias guardadas y armar la respuesta con su evaluación y alerta
     lecturas_out = []
-    for lectura, resultado in evaluaciones:
+    for lectura, resultado, alerta in evaluaciones:
         db.refresh(lectura)
+        if alerta:
+            db.refresh(alerta)
         lecturas_out.append(
             LecturaLoteOut(
                 **_datos_lectura(lectura),
                 evaluacion=_evaluacion_out(resultado),
+                alerta=AlertaOut.model_validate(alerta) if alerta else None,
             )
         )
 

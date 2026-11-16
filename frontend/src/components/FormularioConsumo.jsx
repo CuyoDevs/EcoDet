@@ -29,6 +29,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
 
   const [errores, setErrores] = useState({})
   const [mensajeExito, setMensajeExito] = useState('')
+  const [alertaReciente, setAlertaReciente] = useState(null)
   const [resumenLote, setResumenLote] = useState(null)
   const [errorGeneral, setErrorGeneral] = useState('')
   const [cargando, setCargando] = useState(false)
@@ -60,6 +61,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     setCargando(true)
     setErrores({})
     setMensajeExito('')
+    setAlertaReciente(null)
     setResumenLote(null)
     setErrorGeneral('')
 
@@ -74,6 +76,21 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
 
       const nuevaLectura = await crearLecturaConsumo(payload)
       setMensajeExito('¡Lectura registrada con éxito!')
+
+      // HU-13 / DET-88: Advertencia inmediata si el detector disparó alerta de consumo inusual
+      if (nuevaLectura.alerta || nuevaLectura.evaluacion?.alerta_generada) {
+        setAlertaReciente({
+          tipo: nuevaLectura.alerta?.tipo || (nuevaLectura.evaluacion?.estado === 'alta' ? 'ALTA' : 'BAJA'),
+          desvio_porcentual: nuevaLectura.evaluacion?.desvio_porcentual ?? nuevaLectura.alerta?.desvio_porcentual,
+          mensaje: nuevaLectura.evaluacion?.mensaje || 'Se ha detectado un consumo inusual en este servicio.',
+          consumo_por_dia: nuevaLectura.evaluacion?.consumo_por_dia ?? nuevaLectura.alerta?.consumo_por_dia,
+          consumo_habitual: nuevaLectura.evaluacion?.promedio ?? nuevaLectura.alerta?.consumo_habitual_por_dia,
+          servicio: nuevaLectura.servicio
+        })
+      } else {
+        setAlertaReciente(null)
+      }
+
       setFormData((prev) => ({
         ...prev,
         fecha_inicio: '',
@@ -126,6 +143,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     setCargando(true)
     setErrores({})
     setMensajeExito('')
+    setAlertaReciente(null)
     setResumenLote(null)
     setErrorGeneral('')
 
@@ -195,7 +213,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
           <button
             type="button"
-            onClick={() => { setModo('individual'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); }}
+            onClick={() => { setModo('individual'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); setAlertaReciente(null); }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
               modo === 'individual'
                 ? 'bg-white text-teal-700 shadow-sm'
@@ -206,7 +224,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
           </button>
           <button
             type="button"
-            onClick={() => { setModo('lote'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); }}
+            onClick={() => { setModo('lote'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); setAlertaReciente(null); }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
               modo === 'lote'
                 ? 'bg-white text-teal-700 shadow-sm'
@@ -225,14 +243,77 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         </div>
       )}
 
+      {/* Banner de Advertencia Inmediata de Alerta (HU-13 / DET-88) */}
+      {alertaReciente && (
+        <div
+          role="alert"
+          aria-label="banner-alerta-consumo"
+          className={`p-4 mb-4 rounded-xl border shadow-sm transition-all ${
+            alertaReciente.tipo === 'ALTA'
+              ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+              : 'bg-sky-50/90 border-sky-300 text-sky-950'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+              alertaReciente.tipo === 'ALTA' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'
+            }`}>
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="flex-1 text-sm space-y-1">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-semibold text-base">
+                  {alertaReciente.tipo === 'ALTA' ? '¡Alerta de Consumo Alto!' : '¡Alerta de Consumo Bajo Inusual!'}
+                </h3>
+                {alertaReciente.desvio_porcentual != null && (
+                  <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${
+                    alertaReciente.tipo === 'ALTA'
+                      ? 'bg-amber-200 text-amber-900'
+                      : 'bg-sky-200 text-sky-900'
+                  }`}>
+                    {alertaReciente.desvio_porcentual > 0 ? `+${alertaReciente.desvio_porcentual}%` : `${alertaReciente.desvio_porcentual}%`}
+                  </span>
+                )}
+              </div>
+              <p className="text-slate-700">{alertaReciente.mensaje}</p>
+              {alertaReciente.consumo_por_dia != null && alertaReciente.consumo_habitual != null && (
+                <div className="text-xs text-slate-500 pt-1 flex items-center gap-4 border-t border-slate-200/60 mt-1.5">
+                  <span>Registrado: <strong>{alertaReciente.consumo_por_dia} /día</strong></span>
+                  <span>Habitual: <strong>{alertaReciente.consumo_habitual} /día</strong></span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {resumenLote && (
-        <div className="p-4 mb-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1">
+        <div className="p-4 mb-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-2">
           <p className="font-semibold text-slate-800">Estado del detector tras la carga:</p>
           <ul className="list-disc list-inside space-y-0.5">
             <li>Luz: {resumenLote.detector_activo_por_servicio.LUZ ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Aprendiendo patrón</span>}</li>
             <li>Gas: {resumenLote.detector_activo_por_servicio.GAS ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Aprendiendo patrón</span>}</li>
             <li>Agua: {resumenLote.detector_activo_por_servicio.AGUA ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Sin datos suficientes</span>}</li>
           </ul>
+
+          {resumenLote.lecturas?.some(l => l.alerta || l.evaluacion?.alerta_generada) && (
+            <div className="pt-2 border-t border-slate-200 space-y-1">
+              <p className="font-semibold text-amber-800 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span>Alertas generadas en el lote ({resumenLote.lecturas.filter(l => l.alerta || l.evaluacion?.alerta_generada).length}):</span>
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 pl-2 text-slate-700">
+                {resumenLote.lecturas
+                  .filter(l => l.alerta || l.evaluacion?.alerta_generada)
+                  .map((l, i) => (
+                    <li key={i}>
+                      {l.servicio} ({l.fecha_inicio} a {l.fecha_fin}): <strong className="text-amber-800">{l.evaluacion?.estado === 'alta' ? 'Consumo Alto' : 'Consumo Bajo'}</strong>
+                      {l.evaluacion?.desvio_porcentual != null && ` (${l.evaluacion.desvio_porcentual > 0 ? '+' : ''}${l.evaluacion.desvio_porcentual}%)`}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

@@ -119,8 +119,8 @@ class InmuebleOut(BaseModel):
     nombre: str
     direccion: str | None = None
 
-from datetime import date
-from .models import ServicioEnum
+from datetime import date, datetime
+from .models import ServicioEnum, TipoAlertaEnum, EstadoAlertaEnum
 
 class LecturaIn(BaseModel):
     inmueble_id: int
@@ -164,8 +164,22 @@ class LecturaOut(BaseModel):
     consumo: float
 
 
+class AlertaOut(BaseModel):
+    """Esquema de salida para una alerta generada por el detector (HU-13 / DET-86)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    lectura_id: int
+    tipo: TipoAlertaEnum
+    estado: EstadoAlertaEnum
+    desvio_porcentual: float
+    consumo_por_dia: float
+    consumo_habitual_por_dia: float
+    fecha_creacion: datetime
+
+
 class EvaluacionOut(BaseModel):
-    """Resultado del detector para una lectura (HU-12 / DET-82, DET-83).
+    """Resultado del detector para una lectura (HU-12 / DET-82, DET-83 y HU-13 / DET-87).
 
     `estado` es "aprendiendo" mientras el servicio no tenga 6 lecturas (o la
     referencia útil quede en menos de 3), y si no "dentro", "alta" o "baja".
@@ -184,12 +198,16 @@ class EvaluacionOut(BaseModel):
     limite_superior: float | None = None
     cantidad_referencia: int = 0
     referencia_estacional: bool = False
+    desvio_porcentual: float | None = None
+    mensaje: str | None = None
+    alerta_generada: bool = False
 
 
 class LecturaCreadaOut(LecturaOut):
-    """Lectura individual recién cargada, con el resultado del detector (DET-83)."""
+    """Lectura individual recién cargada, con el resultado del detector (DET-83, DET-86)."""
 
     evaluacion: EvaluacionOut
+    alerta: AlertaOut | None = None
 
 
 # --- Esquemas para Carga en Lote (HU-09 / DET-17) ---
@@ -234,9 +252,10 @@ class LecturaEdicionIn(LecturaFilaIn):
 
 
 class LecturaLoteOut(LecturaOut):
-    """Fila de un lote ya guardada, con su resultado del detector (DET-83)."""
+    """Fila de un lote ya guardada, con su resultado del detector (DET-83, DET-86)."""
 
     evaluacion: EvaluacionOut
+    alerta: AlertaOut | None = None
 
 
 class CargaLoteIn(BaseModel):
