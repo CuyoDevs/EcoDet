@@ -7,16 +7,22 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Lectura, Inmueble, Usuario, ServicioEnum
+from ..models import Lectura, Inmueble, Usuario, ServicioEnum, Alerta
 from ..schemas import (
     LecturaIn, LecturaOut, LecturaEdicionIn, CargaLoteIn, CargaLoteOut,
     HistorialInmuebleOut, HistorialServicioOut, LecturaHistorialOut,
     EstadisticasServicio, EvaluacionOut, LecturaCreadaOut, LecturaLoteOut,
+    AlertaOut,
 )
 from ..dependencies import get_current_user
 from ..config import detector_config
 from ..services.detector import (
-    evaluar_lectura, lecturas_faltantes_para_activar, reemplazar_alerta_de_lectura,
+    evaluar_lectura,
+    lecturas_faltantes_para_activar,
+    reemplazar_alerta_de_lectura,
+    alerta_desde_resultado,
+    EstadoEvaluacion,
+    ResultadoEvaluacion,
 )
 
 router = APIRouter(prefix="/api/consumos", tags=["consumos"])
@@ -34,9 +40,45 @@ def _datos_lectura(lectura: Lectura) -> dict:
     }
 
 
-def _evaluacion_out(resultado) -> EvaluacionOut:
-    """Convierte el resultado del detector al esquema que expone la API."""
-    return EvaluacionOut.model_validate(resultado)
+def _evaluacion_out(resultado: ResultadoEvaluacion) -> EvaluacionOut:
+    """Convierte el resultado del detector al esquema que expone la API (HU-12, HU-13 / DET-87)."""
+    desvio = None
+    mensaje = None
+    alerta_generada = False
+
+    if resultado.promedio and resultado.promedio > 0:
+        desvio = round(((resultado.consumo_por_dia - resultado.promedio) / resultado.promedio) * 100, 2)
+
+    if resultado.estado == EstadoEvaluacion.ALTA:
+        alerta_generada = True
+        pct = abs(desvio) if desvio is not None else 0.0
+        mensaje = f"Consumo alto detectado: un {pct:.1f}% superior a lo habitual para este servicio."
+    elif resultado.estado == EstadoEvaluacion.BAJA:
+        alerta_generada = True
+        pct = abs(desvio) if desvio is not None else 0.0
+        mensaje = f"Consumo bajo inusual detectado: un {pct:.1f}% inferior a lo habitual para este servicio."
+    elif resultado.estado == EstadoEvaluacion.DENTRO:
+        mensaje = "Consumo dentro de los parámetros habituales."
+    elif resultado.estado == EstadoEvaluacion.APRENDIENDO:
+        mensaje = "El detector continúa aprendiendo los patrones de consumo."
+
+    return EvaluacionOut(
+        estado=resultado.estado.value if hasattr(resultado.estado, "value") else str(resultado.estado),
+        consumo_por_dia=resultado.consumo_por_dia,
+        umbral=resultado.umbral,
+        motivo=resultado.motivo,
+        promedio=resultado.promedio,
+        desvio_efectivo=resultado.desvio_efectivo,
+        limite_inferior=resultado.limite_inferior,
+        limite_superior=resultado.limite_superior,
+        cantidad_referencia=resultado.cantidad_referencia,
+        referencia_estacional=resultado.referencia_estacional,
+        desvio_porcentual=desvio,
+        mensaje=mensaje,
+        alerta_generada=alerta_generada,
+        lecturas_registradas=getattr(resultado, "lecturas_registradas", 0),
+        lecturas_faltantes=getattr(resultado, "lecturas_faltantes", 0),
+    )
 
 
 @router.post("", response_model=LecturaCreadaOut, status_code=status.HTTP_201_CREATED)
@@ -49,9 +91,8 @@ def crear_lectura(
     Registra una nueva lectura de consumo para un inmueble del usuario autenticado (DET-16).
 
     Después de guardarla la evalúa contra el historial del servicio (HU-12 / DET-83) y
-    devuelve el resultado junto con la lectura. No crea la alerta: eso lo hará HU-13.
+    si detecta anomalía (alta o baja), genera y persiste la alerta en estado PENDIENTE (HU-13 / DET-86, DET-87).
     """
-    # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado (RN-01)
     inmueble = db.query(Inmueble).filter(
         Inmueble.id == lectura_in.inmueble_id,
         Inmueble.usuario_id == usuario.id
@@ -63,7 +104,6 @@ def crear_lectura(
             content={"errores": {"inmueble_id": "El inmueble no existe o no pertenece al usuario."}}
         )
 
-    # 2. Validar superposiciÃ³n de perÃ­odos para el mismo servicio en el inmueble (RN-14)
     superposicion = db.query(Lectura).filter(
         Lectura.inmueble_id == lectura_in.inmueble_id,
         Lectura.servicio == lectura_in.servicio,
@@ -74,10 +114,9 @@ def crear_lectura(
     if superposicion:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"errores": {"fecha_inicio": "El perÃ­odo ingresado se superpone con otra lectura existente para este servicio."}}
+            content={"errores": {"fecha_inicio": "El período ingresado se superpone con otra lectura existente para este servicio."}}
         )
 
-    # 3. Crear y guardar la nueva lectura de consumo
     nueva_lectura = Lectura(
         inmueble_id=lectura_in.inmueble_id,
         servicio=lectura_in.servicio,
@@ -87,19 +126,24 @@ def crear_lectura(
     )
 
     db.add(nueva_lectura)
-    # Flush para que la lectura tenga id y quede visible en la consulta de la evaluación.
     db.flush()
 
-    # 4. Evaluar contra el historial del mismo servicio (HU-12 / DET-83).
-    #    El resultado se devuelve, pero no se persiste ninguna alerta: eso es de HU-13.
     resultado = evaluar_lectura(db, nueva_lectura)
+    alerta = None
+    if resultado.estado in (EstadoEvaluacion.ALTA, EstadoEvaluacion.BAJA):
+        alerta = alerta_desde_resultado(nueva_lectura, resultado)
+        if alerta:
+            db.add(alerta)
 
     db.commit()
     db.refresh(nueva_lectura)
+    if alerta:
+        db.refresh(alerta)
 
     return LecturaCreadaOut(
         **_datos_lectura(nueva_lectura),
         evaluacion=_evaluacion_out(resultado),
+        alerta=AlertaOut.model_validate(alerta) if alerta else None,
     )
 
 
@@ -109,15 +153,7 @@ def crear_lecturas_lote(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user)
 ):
-    """
-    Carga masiva histórica de lecturas de consumo bajo la regla 'todo o nada' (HU-09 / DET-17).
-    Si alguna fila es inválida o se superpone interna o externamente, ninguna se persiste.
-
-    Después de guardar el lote evalúa cada fila contra las demás del servicio, incluidas
-    las del propio lote (HU-12 / DET-83). No crea alertas: el resultado vuelve en la
-    respuesta para que HU-13 las genere.
-    """
-    # 1. Verificar que el inmueble exista y pertenezca al usuario autenticado (RN-01)
+    """Carga masiva histórica de lecturas de consumo bajo la regla 'todo o nada' (HU-09 / DET-17)."""
     inmueble = db.query(Inmueble).filter(
         Inmueble.id == lote_in.inmueble_id,
         Inmueble.usuario_id == usuario.id
@@ -129,8 +165,6 @@ def crear_lecturas_lote(
             content={"errores": {"inmueble_id": "El inmueble no existe o no pertenece al usuario."}}
         )
 
-    # 2. Validar superposiciÃ³n INTERNA entre las filas del lote
-    # Agrupamos por servicio
     filas_por_servicio = {}
     for idx, fila in enumerate(lote_in.lecturas):
         srv = fila.servicio
@@ -140,7 +174,6 @@ def crear_lecturas_lote(
 
     errores_filas = {}
     for srv, lista in filas_por_servicio.items():
-        # Comparar pares en la lista
         for i in range(len(lista)):
             idx_a, fila_a = lista[i]
             for j in range(i + 1, len(lista)):
@@ -154,12 +187,11 @@ def crear_lecturas_lote(
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={
-                "mensaje": "El lote contiene perÃ­odos superpuestos internamente (todo o nada).",
+                "mensaje": "El lote contiene períodos superpuestos internamente (todo o nada).",
                 "errores": errores_filas
             }
         )
 
-    # 3. Validar superposiciÃ³n EXTERNA contra lecturas ya guardadas en la base de datos
     for idx, fila in enumerate(lote_in.lecturas):
         superposicion = db.query(Lectura).filter(
             Lectura.inmueble_id == lote_in.inmueble_id,
@@ -178,12 +210,11 @@ def crear_lecturas_lote(
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={
-                "mensaje": "Una o mÃ¡s lecturas del lote se superponen con el historial existente (todo o nada).",
+                "mensaje": "Una o más lecturas del lote se superponen con el historial existente (todo o nada).",
                 "errores": errores_filas
             }
         )
 
-    # 4. Transacción atómica Todo o Nada + evaluación de cada fila (DET-83)
     nuevas_lecturas = []
     evaluaciones = []
     try:
@@ -198,12 +229,16 @@ def crear_lecturas_lote(
             db.add(nueva)
             nuevas_lecturas.append(nueva)
 
-        # Flush para que todas las filas tengan id y se vean entre sí en la evaluación:
-        # cada lectura del lote se compara con las demás del servicio, incluidas las del lote.
         db.flush()
-        evaluaciones = [
-            (lectura, evaluar_lectura(db, lectura)) for lectura in nuevas_lecturas
-        ]
+        evaluaciones = []
+        for lectura in nuevas_lecturas:
+            res = evaluar_lectura(db, lectura)
+            alerta = None
+            if res.estado in (EstadoEvaluacion.ALTA, EstadoEvaluacion.BAJA):
+                alerta = alerta_desde_resultado(lectura, res)
+                if alerta:
+                    db.add(alerta)
+            evaluaciones.append((lectura, res, alerta))
 
         db.commit()
     except Exception as e:
@@ -213,18 +248,19 @@ def crear_lecturas_lote(
             content={"mensaje": f"Error al persistir el lote: {str(e)}"}
         )
 
-    # Refrescar instancias guardadas y armar la respuesta con su evaluación
     lecturas_out = []
-    for lectura, resultado in evaluaciones:
+    for lectura, resultado, alerta in evaluaciones:
         db.refresh(lectura)
+        if alerta:
+            db.refresh(alerta)
         lecturas_out.append(
             LecturaLoteOut(
                 **_datos_lectura(lectura),
                 evaluacion=_evaluacion_out(resultado),
+                alerta=AlertaOut.model_validate(alerta) if alerta else None,
             )
         )
 
-    # 5. Calcular si el detector queda activo por servicio (RN-07: >= 6 lecturas en total)
     minimo_lecturas = detector_config.minimo_de_lecturas
     detector_activo = {}
     lecturas_faltantes = {}
@@ -246,7 +282,6 @@ def crear_lecturas_lote(
 
 
 def _buscar_lectura_del_usuario(db: Session, lectura_id: int, usuario: Usuario) -> Lectura | None:
-    """Una lectura solo existe para el dueño de su inmueble (RN-01)."""
     return (
         db.query(Lectura)
         .join(Inmueble, Lectura.inmueble_id == Inmueble.id)
@@ -256,7 +291,6 @@ def _buscar_lectura_del_usuario(db: Session, lectura_id: int, usuario: Usuario) 
 
 
 def _lectura_no_encontrada() -> JSONResponse:
-    # RN-01: la lectura de otro usuario responde igual que una inexistente.
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={"errores": {"general": "Lectura no encontrada."}}
@@ -270,20 +304,10 @@ def actualizar_lectura(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user)
 ):
-    """
-    Edita una lectura de consumo del usuario autenticado (HU-11 / DET-73, CU-09).
-
-    Se valida igual que al cargarla (RN-03, RN-05: 422) y no puede superponerse con otra lectura
-    del mismo servicio e inmueble (RN-14: 409); la propia lectura no cuenta como superposición.
-    Cambia servicio, fechas y consumo; el inmueble no se puede cambiar.
-    Después de guardar se reevalúa SOLO esta lectura y su alerta anterior se reemplaza por el
-    resultado nuevo (DET-75); las alertas ya generadas para las demás no se recalculan (RN-17).
-    """
     lectura = _buscar_lectura_del_usuario(db, lectura_id, usuario)
     if not lectura:
         return _lectura_no_encontrada()
 
-    # RN-14: sin superposición con OTRA lectura (por eso se excluye la propia).
     superposicion = db.query(Lectura).filter(
         Lectura.inmueble_id == lectura.inmueble_id,
         Lectura.servicio == lectura_in.servicio,
@@ -303,8 +327,6 @@ def actualizar_lectura(
     lectura.fecha_fin = lectura_in.fecha_fin
     lectura.consumo = lectura_in.consumo
 
-    # La lectura cambió: se reevalúa contra su historial y la alerta anterior se reemplaza
-    # por el resultado nuevo. Las alertas de las demás lecturas no se tocan (RN-17).
     reemplazar_alerta_de_lectura(db, lectura)
 
     db.commit()
@@ -319,14 +341,6 @@ def eliminar_lectura(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user)
 ):
-    """
-    Elimina una lectura del usuario autenticado junto con su alerta (HU-11 / DET-74, CU-09).
-    Responde 204 sin cuerpo. La confirmación ("se borra la lectura y su alerta") la pide el frontend.
-
-    El borrado de la alerta lo hace el ORM (`cascade="all, delete-orphan"` en `Lectura.alerta`): no
-    depende de que SQLite tenga activadas las claves foráneas, por eso se usa `db.delete()`.
-    No toca otras lecturas ni sus alertas (RN-17), y libera el período para volver a cargarlo.
-    """
     lectura = _buscar_lectura_del_usuario(db, lectura_id, usuario)
     if not lectura:
         return _lectura_no_encontrada()
@@ -338,17 +352,15 @@ def eliminar_lectura(
 
 
 def _calcular_estadisticas(lecturas_ord: list) -> dict | None:
-    """Calcula promedio, min, max y tendencia sobre una lista de lecturas ordenadas por fecha."""
     if not lecturas_ord:
         return None
     consumos_dia = [l.consumo_por_dia for l in lecturas_ord]
     promedio = sum(consumos_dia) / len(consumos_dia)
     minimo = min(consumos_dia)
     maximo = max(consumos_dia)
-    # Tendencia: comparar el consumo_por_dia del Ãºltimo perÃ­odo vs el anterior
     if len(consumos_dia) >= 2:
         diff = consumos_dia[-1] - consumos_dia[-2]
-        umbral = promedio * 0.05  # 5 % de tolerancia para "estable"
+        umbral = promedio * 0.05
         if diff > umbral:
             tendencia = "sube"
         elif diff < -umbral:
@@ -366,11 +378,6 @@ def obtener_historial(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user)
 ):
-    """
-    Devuelve el historial de lecturas de un inmueble agrupado por servicio,
-    con estadisticas y estado del detector (HU-10 / DET-18).
-    """
-    # 1. Verificar pertenencia del inmueble (RN-01)
     inmueble = db.query(Inmueble).filter(
         Inmueble.id == inmueble_id,
         Inmueble.usuario_id == usuario.id
@@ -386,7 +393,6 @@ def obtener_historial(
     resultado = {"inmueble_id": inmueble_id}
 
     for srv in [ServicioEnum.LUZ, ServicioEnum.GAS, ServicioEnum.AGUA]:
-        # Lecturas ordenadas por fecha de inicio (RN-06: ordenadas por perÃ­odo)
         lecturas_db = (
             db.query(Lectura)
             .filter(Lectura.inmueble_id == inmueble_id, Lectura.servicio == srv)
@@ -420,4 +426,3 @@ def obtener_historial(
         )
 
     return resultado
-

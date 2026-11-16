@@ -347,8 +347,12 @@ def test_lote_evalua_cada_fila_contra_las_demas_incluidas_las_del_lote(client, d
     # La fila 27 es alta porque se la compara con las otras cinco (media 20, límites 14-26).
     assert data["lecturas"][-1]["evaluacion"]["promedio"] == pytest.approx(20)
     assert data["lecturas"][-1]["evaluacion"]["limite_superior"] == pytest.approx(26)
-    # DET-83: el lote tampoco persiste alertas.
-    assert db.query(Alerta).count() == 0
+    # HU-13 / DET-86: el lote persiste la alerta de la fila anómala (consumo 27: alta).
+    assert db.query(Alerta).count() == 1
+    alerta_creada = db.query(Alerta).first()
+    assert alerta_creada.tipo == TipoAlertaEnum.ALTA
+    assert alerta_creada.estado == EstadoAlertaEnum.PENDIENTE
+    assert alerta_creada.desvio_porcentual == pytest.approx(35.0)
 
 
 def test_lote_con_menos_de_seis_lecturas_queda_aprendiendo(client, db):
