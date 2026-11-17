@@ -1,24 +1,17 @@
-"""Esquemas Pydantic V2 de la API (DET-30).
-
-Las validaciones de HU-02 / RN-15 viven acá para que cualquier endpoint que reciba
-estos datos las aplique igual. Los mensajes van en español porque se muestran
-tal cual en el formulario del frontend.
-"""
+"""Esquemas Pydantic V2 de la API (DET-30)."""
 import re
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-# Formato razonable de correo (sin depender de librerías extra).
 _CORREO_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$")
 
 NOMBRE_MAX = 100
 CORREO_MAX = 255
 CONTRASENA_MIN = 8
-CONTRASENA_MAX_BYTES = 72  # límite real de bcrypt
+CONTRASENA_MAX_BYTES = 72
 
 
 def validar_contrasena(valor: str) -> str:
-    """RN-15: mínimo 8 caracteres, con letras y números."""
     if len(valor) < CONTRASENA_MIN or not any(c.isalpha() for c in valor) or not any(c.isdigit() for c in valor):
         raise ValueError("La contraseña debe tener al menos 8 caracteres, con letras y números.")
     if len(valor.encode("utf-8")) > CONTRASENA_MAX_BYTES:
@@ -44,7 +37,6 @@ class RegistroIn(BaseModel):
     @field_validator("correo")
     @classmethod
     def _correo(cls, v: str) -> str:
-        # Se normaliza a minúsculas: "Ana@x.com" y "ana@x.com" son la misma cuenta.
         v = v.strip().lower()
         if len(v) > CORREO_MAX or not _CORREO_RE.match(v):
             raise ValueError("Ingresa un correo válido (por ejemplo, nombre@correo.com).")
@@ -57,21 +49,12 @@ class RegistroIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    """HU-03 / CU-02 · Iniciar sesión (DET-37).
-
-    Solo exige que los campos no vengan vacíos. A propósito NO aplica las reglas de RN-15 ni el
-    formato del correo: un dato mal formado simplemente no coincide con ninguna cuenta y recibe el
-    mismo error genérico que cualquier credencial incorrecta, sin revelar qué falló ni cómo es la
-    política de contraseñas.
-    """
-
     correo: str
     contrasena: str
 
     @field_validator("correo")
     @classmethod
     def _correo(cls, v: str) -> str:
-        # Misma normalización que en el registro: "Ana@x.com" y "ana@x.com" son la misma cuenta.
         v = v.strip().lower()
         if not v:
             raise ValueError("Ingresa tu correo.")
@@ -165,7 +148,6 @@ class LecturaOut(BaseModel):
 
 
 class AlertaOut(BaseModel):
-    """Esquema de salida para una alerta generada por el detector (HU-13 / DET-86)."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -179,12 +161,7 @@ class AlertaOut(BaseModel):
 
 
 class EvaluacionOut(BaseModel):
-    """Resultado del detector para una lectura (HU-12 / DET-82, DET-83 y HU-13 / DET-87).
-
-    `estado` es "aprendiendo" mientras el servicio no tenga 6 lecturas (o la
-    referencia útil quede en menos de 3), y si no "dentro", "alta" o "baja".
-    Los campos de promedio, desvío y límites vienen vacíos en "aprendiendo".
-    """
+    """Resultado del detector para una lectura (HU-12 y HU-13 / HU-14)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -198,19 +175,17 @@ class EvaluacionOut(BaseModel):
     limite_superior: float | None = None
     cantidad_referencia: int = 0
     referencia_estacional: bool = False
+    lecturas_registradas: int = 0
+    lecturas_faltantes: int = 0
     desvio_porcentual: float | None = None
     mensaje: str | None = None
     alerta_generada: bool = False
 
 
 class LecturaCreadaOut(LecturaOut):
-    """Lectura individual recién cargada, con el resultado del detector (DET-83, DET-86)."""
-
     evaluacion: EvaluacionOut
     alerta: AlertaOut | None = None
 
-
-# --- Esquemas para Carga en Lote (HU-09 / DET-17) ---
 
 class LecturaFilaIn(BaseModel):
     servicio: ServicioEnum
@@ -244,16 +219,10 @@ class LecturaFilaIn(BaseModel):
 
 
 class LecturaEdicionIn(LecturaFilaIn):
-    """Cuerpo de PUT /api/consumos/{id} (HU-11 / DET-73).
-
-    Mismos campos y mismas validaciones que una lectura al cargarla (RN-03, RN-05): se heredan de
-    LecturaFilaIn para que la carga y la edición nunca se desalineen. El inmueble no se puede cambiar.
-    """
+    pass
 
 
 class LecturaLoteOut(LecturaOut):
-    """Fila de un lote ya guardada, con su resultado del detector (DET-83, DET-86)."""
-
     evaluacion: EvaluacionOut
     alerta: AlertaOut | None = None
 
@@ -275,12 +244,10 @@ class CargaLoteOut(BaseModel):
     cantidad_cargadas: int
     lecturas: list[LecturaLoteOut]
     detector_activo_por_servicio: dict[str, bool]
+    lecturas_faltantes_por_servicio: dict[str, int] = Field(default_factory=dict)
 
-
-# --- Esquemas para Historial y Gráficos (HU-10 / DET-18) ---
 
 class LecturaHistorialOut(BaseModel):
-    """Lectura enriquecida con consumo_por_dia y flag de alerta para el gráfico."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -293,22 +260,20 @@ class LecturaHistorialOut(BaseModel):
 
 
 class EstadisticasServicio(BaseModel):
-    """Estadísticas básicas de un servicio para el panel de historial."""
     promedio: float
     minimo: float
     maximo: float
-    tendencia: str  # "sube", "baja", "estable", "sin_datos"
+    tendencia: str
 
 
 class HistorialServicioOut(BaseModel):
-    """Historial completo de un servicio: lecturas ordenadas + estadísticas."""
     detector_activo: bool
+    lecturas_faltantes: int = 0
     lecturas: list[LecturaHistorialOut]
     estadisticas: EstadisticasServicio | None
 
 
 class HistorialInmuebleOut(BaseModel):
-    """Respuesta del GET /api/consumos/{inmueble_id}/historial (HU-10 / DET-18)."""
     inmueble_id: int
     LUZ: HistorialServicioOut
     GAS: HistorialServicioOut

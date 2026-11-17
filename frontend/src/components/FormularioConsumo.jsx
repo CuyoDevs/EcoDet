@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { crearLecturaConsumo, crearLecturasLote } from '../api/consumos'
 import CampoFormulario from './CampoFormulario'
+import AvisoAprendizaje from './AvisoAprendizaje'
+import { MENSAJE_APRENDIENDO, textoLecturasFaltantes } from '../utils/aprendizaje'
 import { Zap, Flame, Droplets, CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 
 const UNIDADES = {
@@ -12,7 +14,6 @@ const UNIDADES = {
 export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLecturaCreada, onCancelar }) {
   const [modo, setModo] = useState('individual') // 'individual' | 'lote'
   
-  // Estado para Lectura Individual
   const [formData, setFormData] = useState({
     inmueble_id: inmuebleId || (inmuebles.length > 0 ? inmuebles[0].id : ''),
     servicio: 'LUZ',
@@ -21,7 +22,6 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     consumo: ''
   })
 
-  // Estado para Carga en Lote (HU-09 / DET-17)
   const [filasLote, setFilasLote] = useState([
     { servicio: 'LUZ', fecha_inicio: '', fecha_fin: '', consumo: '' },
     { servicio: 'LUZ', fecha_inicio: '', fecha_fin: '', consumo: '' }
@@ -31,6 +31,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
   const [mensajeExito, setMensajeExito] = useState('')
   const [alertaReciente, setAlertaReciente] = useState(null)
   const [resumenLote, setResumenLote] = useState(null)
+  const [avisoAprendizaje, setAvisoAprendizaje] = useState(null)
   const [errorGeneral, setErrorGeneral] = useState('')
   const [cargando, setCargando] = useState(false)
 
@@ -40,7 +41,6 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     }
   }, [inmuebleId])
 
-  // --- Handlers Individual ---
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -63,6 +63,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     setMensajeExito('')
     setAlertaReciente(null)
     setResumenLote(null)
+    setAvisoAprendizaje(null)
     setErrorGeneral('')
 
     try {
@@ -77,7 +78,12 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
       const nuevaLectura = await crearLecturaConsumo(payload)
       setMensajeExito('¡Lectura registrada con éxito!')
 
-      // HU-13 / DET-88: Advertencia inmediata si el detector disparó alerta de consumo inusual
+      // HU-14: aviso de aprendizaje
+      if (nuevaLectura?.evaluacion?.estado === 'aprendiendo') {
+        setAvisoAprendizaje({ servicio: payload.servicio, evaluacion: nuevaLectura.evaluacion })
+      }
+
+      // HU-13 / DET-88: Alerta inmediata si el detector disparó consumo inusual
       if (nuevaLectura.alerta || nuevaLectura.evaluacion?.alerta_generada) {
         setAlertaReciente({
           tipo: nuevaLectura.alerta?.tipo || (nuevaLectura.evaluacion?.estado === 'alta' ? 'ALTA' : 'BAJA'),
@@ -109,7 +115,6 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     }
   }
 
-  // --- Handlers Lote (HU-09) ---
   const handleFilaChange = (index, campo, valor) => {
     setFilasLote((prev) => {
       const copia = [...prev]
@@ -145,9 +150,9 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
     setMensajeExito('')
     setAlertaReciente(null)
     setResumenLote(null)
+    setAvisoAprendizaje(null)
     setErrorGeneral('')
 
-    // Validación local de campos vacíos en el lote
     const erroresLocales = {}
     const lecturasValidadas = []
 
@@ -209,11 +214,10 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
           <p className="text-xs text-slate-500 mt-0.5">Registra una factura actual o carga varias facturas anteriores (W3)</p>
         </div>
 
-        {/* Selector de pestañas W3 */}
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
           <button
             type="button"
-            onClick={() => { setModo('individual'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); setAlertaReciente(null); }}
+            onClick={() => { setModo('individual'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); setAvisoAprendizaje(null); setAlertaReciente(null); }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
               modo === 'individual'
                 ? 'bg-white text-teal-700 shadow-sm'
@@ -224,7 +228,7 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
           </button>
           <button
             type="button"
-            onClick={() => { setModo('lote'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); setAlertaReciente(null); }}
+            onClick={() => { setModo('lote'); setErrores({}); setErrorGeneral(''); setMensajeExito(''); setAvisoAprendizaje(null); setAlertaReciente(null); }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
               modo === 'lote'
                 ? 'bg-white text-teal-700 shadow-sm'
@@ -243,7 +247,8 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         </div>
       )}
 
-      {/* Banner de Advertencia Inmediata de Alerta (HU-13 / DET-88) */}
+      {avisoAprendizaje && <AvisoAprendizaje {...avisoAprendizaje} />}
+
       {alertaReciente && (
         <div
           role="alert"
@@ -291,29 +296,23 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         <div className="p-4 mb-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-2">
           <p className="font-semibold text-slate-800">Estado del detector tras la carga:</p>
           <ul className="list-disc list-inside space-y-0.5">
-            <li>Luz: {resumenLote.detector_activo_por_servicio.LUZ ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Aprendiendo patrón</span>}</li>
-            <li>Gas: {resumenLote.detector_activo_por_servicio.GAS ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Aprendiendo patrón</span>}</li>
-            <li>Agua: {resumenLote.detector_activo_por_servicio.AGUA ? <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span> : <span className="text-slate-500">Sin datos suficientes</span>}</li>
+            {[['LUZ', 'Luz'], ['GAS', 'Gas'], ['AGUA', 'Agua']].map(([clave, nombre]) => {
+              const faltan = resumenLote.lecturas_faltantes_por_servicio?.[clave] ?? 0
+              return (
+                <li key={clave}>
+                  {nombre}:{' '}
+                  {resumenLote.detector_activo_por_servicio[clave] ? (
+                    <span className="text-teal-700 font-bold">Activo (≥ 6 lecturas)</span>
+                  ) : (
+                    <span className="text-slate-500">
+                      {MENSAJE_APRENDIENDO}
+                      {faltan > 0 && ` ${textoLecturasFaltantes(faltan)} para empezar a evaluar.`}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
-
-          {resumenLote.lecturas?.some(l => l.alerta || l.evaluacion?.alerta_generada) && (
-            <div className="pt-2 border-t border-slate-200 space-y-1">
-              <p className="font-semibold text-amber-800 flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span>Alertas generadas en el lote ({resumenLote.lecturas.filter(l => l.alerta || l.evaluacion?.alerta_generada).length}):</span>
-              </p>
-              <ul className="list-disc list-inside space-y-0.5 pl-2 text-slate-700">
-                {resumenLote.lecturas
-                  .filter(l => l.alerta || l.evaluacion?.alerta_generada)
-                  .map((l, i) => (
-                    <li key={i}>
-                      {l.servicio} ({l.fecha_inicio} a {l.fecha_fin}): <strong className="text-amber-800">{l.evaluacion?.estado === 'alta' ? 'Consumo Alto' : 'Consumo Bajo'}</strong>
-                      {l.evaluacion?.desvio_porcentual != null && ` (${l.evaluacion.desvio_porcentual > 0 ? '+' : ''}${l.evaluacion.desvio_porcentual}%)`}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
 
@@ -324,7 +323,6 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         </div>
       )}
 
-      {/* Selector de Inmueble común si no viene fijado */}
       {inmuebles.length > 0 && !inmuebleId && (
         <div className="mb-4">
           <label htmlFor="inmueble_id" className="block text-sm font-medium text-slate-700 mb-1">
@@ -346,7 +344,6 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         </div>
       )}
 
-      {/* MODO 1: LECTURA INDIVIDUAL (HU-08) */}
       {modo === 'individual' && (
         <form onSubmit={handleSubmitIndividual} noValidate className="space-y-5">
           <div>
@@ -467,7 +464,6 @@ export default function FormularioConsumo({ inmuebleId, inmuebles = [], onLectur
         </form>
       )}
 
-      {/* MODO 2: CARGA EN LOTE (HU-09 / DET-17) */}
       {modo === 'lote' && (
         <form onSubmit={handleSubmitLote} noValidate className="space-y-5">
           <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
