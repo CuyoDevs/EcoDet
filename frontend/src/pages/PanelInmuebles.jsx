@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { BarChart2, LogOut, Pencil, Plus, Trash2, Zap } from 'lucide-react'
+import { BarChart2, Bell, LogOut, Pencil, Plus, Trash2, Zap } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import PanelVacio from '../components/PanelVacio'
 import CampoFormulario from '../components/CampoFormulario'
@@ -8,11 +8,14 @@ import EliminarInmuebleModal from '../components/EliminarInmuebleModal'
 import FormularioConsumo from '../components/FormularioConsumo'
 import HistorialConsumos from '../components/HistorialConsumos'
 import { listarInmuebles, crearInmueble, actualizarInmueble, eliminarInmueble } from '../api/inmuebles'
+import { irA } from '../routes/hashRouter'
+import { rutaAlertasDeInmueble } from '../routes/Rutas'
 
 export const MENSAJE_NOMBRE_VACIO = 'Ingresa un nombre para el inmueble.'
 
 // Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05),
-// editarlo (HU-06), eliminarlo (HU-07), registrar consumo (HU-08) y ver el historial (HU-10).
+// editarlo (HU-06), eliminarlo (HU-07), registrar consumo (HU-08), ver el historial (HU-10)
+// y consultar las alertas pendientes por inmueble (HU-15 / DET-98).
 export default function PanelInmuebles() {
   const { usuario, logout } = useAuth()
   const [inmuebles, setInmuebles] = useState([])
@@ -29,6 +32,10 @@ export default function PanelInmuebles() {
   const [eliminando, setEliminando] = useState(null) // inmueble pendiente de confirmar su borrado (HU-07)
   const [errorEliminacion, setErrorEliminacion] = useState('')
   const [borrando, setBorrando] = useState(false)
+
+  const recargarInmuebles = useCallback(() => {
+    return listarInmuebles().then((lista) => setInmuebles(lista))
+  }, [])
 
   // La lista viene de la API: sobrevive a recargar la página (HU-05, criterio 1).
   useEffect(() => {
@@ -111,7 +118,13 @@ export default function PanelInmuebles() {
     setGuardandoEdicion(true)
     try {
       const actualizado = await actualizarInmueble(editando.id, { nombre, direccion })
-      setInmuebles((actuales) => actuales.map((inm) => (inm.id === actualizado.id ? actualizado : inm)))
+      setInmuebles((actuales) =>
+        actuales.map((inm) =>
+          inm.id === actualizado.id
+            ? { ...actualizado, alertas_pendientes: inm.alertas_pendientes ?? actualizado.alertas_pendientes ?? 0 }
+            : inm
+        )
+      )
       setEditando(null)
     } catch (err) {
       // 409 / 422 / 404 traen { errores: { campo: mensaje } }; el resto (sin conexión, 500) va como aviso general.
@@ -156,7 +169,7 @@ export default function PanelInmuebles() {
     setEnviando(true)
     try {
       const nuevo = await crearInmueble({ nombre, direccion })
-      setInmuebles((actuales) => [...actuales, nuevo])
+      setInmuebles((actuales) => [...actuales, { ...nuevo, alertas_pendientes: nuevo.alertas_pendientes ?? 0 }])
       setMostrandoFormulario(false)
     } catch (err) {
       // 409 y 422 traen { errores: { campo: mensaje } }: se muestran debajo del campo.
@@ -257,7 +270,9 @@ export default function PanelInmuebles() {
               inmuebleId={inmuebleParaConsumo}
               inmuebles={inmuebles}
               onCancelar={() => setInmuebleParaConsumo(null)}
-              onLecturaCreada={() => {}}
+              onLecturaCreada={() => {
+                recargarInmuebles().catch(() => {})
+              }}
             />
           </div>
         )}
@@ -284,57 +299,86 @@ export default function PanelInmuebles() {
           !mostrandoFormulario && <PanelVacio />
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {inmuebles.map((inm) => (
-              <li key={inm.id} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-slate-900 text-lg">{inm.nombre}</h3>
-                    <div className="flex shrink-0 gap-1">
+            {inmuebles.map((inm) => {
+              const pendientes = inm.alertas_pendientes ?? 0
+              return (
+                <li
+                  key={inm.id}
+                  className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-slate-900 text-lg">{inm.nombre}</h3>
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => abrirEdicion(inm)}
+                          aria-label={`Editar ${inm.nombre}`}
+                          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => abrirEliminacion(inm)}
+                          aria-label={`Eliminar ${inm.nombre}`}
+                          className="rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-500 mt-1">{inm.direccion || 'Sin dirección registrada'}</p>
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs text-slate-400">ID: {inm.id}</span>
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => abrirEdicion(inm)}
-                        aria-label={`Editar ${inm.nombre}`}
-                        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                        onClick={() => irA(rutaAlertasDeInmueble(inm.id))}
+                        aria-label={`Ver alertas de ${inm.nombre}`}
+                        className={`inline-flex items-center gap-1.5 text-xs border px-3 py-1.5 rounded-md font-medium transition ${
+                          pendientes > 0
+                            ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
                       >
-                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                        <Bell className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Alertas</span>
+                        <span
+                          aria-label={`${pendientes} alertas pendientes`}
+                          className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[11px] font-semibold ${
+                            pendientes > 0
+                              ? 'bg-red-600 text-white'
+                              : 'bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {pendientes}
+                        </span>
                       </button>
                       <button
                         type="button"
-                        onClick={() => abrirEliminacion(inm)}
-                        aria-label={`Eliminar ${inm.nombre}`}
-                        className="rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-600"
+                        onClick={() => abrirHistorial(inm.id)}
+                        aria-label={`Ver historial de ${inm.nombre}`}
+                        className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-md hover:bg-indigo-100 font-medium transition"
                       >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        <BarChart2 className="w-3.5 h-3.5" />
+                        <span>{inmuebleParaHistorial === inm.id ? 'Ocultar historial' : 'Ver historial'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => abrirConsumo(inm.id)}
+                        className="inline-flex items-center gap-1.5 text-xs bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-md hover:bg-teal-100 font-medium transition"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-teal-600" />
+                        <span>{inmuebleParaConsumo === inm.id ? 'Ocultar consumo' : '+ Cargar consumo'}</span>
                       </button>
                     </div>
                   </div>
-                  <p className="text-sm text-slate-500 mt-1">{inm.direccion || 'Sin dirección registrada'}</p>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                  <span className="text-xs text-slate-400">ID: {inm.id}</span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => abrirHistorial(inm.id)}
-                      aria-label={`Ver historial de ${inm.nombre}`}
-                      className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-md hover:bg-indigo-100 font-medium transition"
-                    >
-                      <BarChart2 className="w-3.5 h-3.5" />
-                      <span>{inmuebleParaHistorial === inm.id ? 'Ocultar historial' : 'Ver historial'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => abrirConsumo(inm.id)}
-                      className="inline-flex items-center gap-1.5 text-xs bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-md hover:bg-teal-100 font-medium transition"
-                    >
-                      <Zap className="w-3.5 h-3.5 text-teal-600" />
-                      <span>{inmuebleParaConsumo === inm.id ? 'Ocultar consumo' : '+ Cargar consumo'}</span>
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              )
+            })}
           </ul>
         )}
       </main>

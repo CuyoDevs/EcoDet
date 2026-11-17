@@ -9,6 +9,7 @@ from .config import settings, detector_config
 from .routers import auth
 from .routers import inmuebles
 from .routers import consumos
+from .routers import alertas
 
 # Crear tablas en SQLite automáticamente al iniciar
 Base.metadata.create_all(bind=engine)
@@ -34,6 +35,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(inmuebles.router)
 app.include_router(consumos.router)
+app.include_router(alertas.router)
 
 _MENSAJES_422 = {
     "missing": "Este campo es obligatorio.",
@@ -95,7 +97,3 @@ def health_check(db: Session = Depends(get_db)):
         },
         "environment": settings.ENVIRONMENT
     }
-from .routers import alertas
-
-# Asegúrate de agregarlo junto a los otros include_router:
-app.include_router(alertas.router)

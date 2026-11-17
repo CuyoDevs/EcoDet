@@ -383,3 +383,18 @@ describe('PanelInmuebles · eliminar (HU-07)', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
   })
 })
+
+describe('PanelInmuebles · contador de alertas (HU-15 / DET-98)', () => {
+  it('muestra el contador de alertas pendientes por inmueble y navega a su vista de alertas', async () => {
+    const user = await montar([
+      { ...CASA, alertas_pendientes: 3 },
+      { id: 2, usuario_id: 1, nombre: 'Depto', direccion: null, alertas_pendientes: 0 },
+    ])
+
+    expect(await screen.findByLabelText('3 alertas pendientes')).toHaveTextContent('3')
+    expect(screen.getByLabelText('0 alertas pendientes')).toHaveTextContent('0')
+
+    await user.click(screen.getByRole('button', { name: 'Ver alertas de Casa Norte' }))
+    expect(window.location.hash).toBe('#/inmuebles/1/alertas')
+  })
+})

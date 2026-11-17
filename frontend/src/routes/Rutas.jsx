@@ -3,15 +3,23 @@ import { useAuth } from '../auth/AuthContext'
 import { useSesionVerificada } from '../auth/useSesionVerificada'
 import AccesoPage from '../pages/AccesoPage'
 import PanelInmuebles from '../pages/PanelInmuebles'
+import PanelAlertas from '../components/PanelAlertas'
 import { irA, useRutaHash } from './hashRouter'
-import PanelAlertas from '../components/PanelAlertas';
-
 
 export const RUTA_ACCESO = '/acceso' // pública: vista W1 (login y registro)
 export const RUTA_PANEL = '/inmuebles' // privada: panel W2 y todo lo que cuelgue de /inmuebles
 
 export function esRutaPrivada(ruta) {
   return ruta === RUTA_PANEL || ruta.startsWith(`${RUTA_PANEL}/`)
+}
+
+export function extraerInmuebleIdDeRutaAlertas(ruta) {
+  const match = ruta.match(/^\/inmuebles\/(\d+)\/alertas$/)
+  return match ? Number(match[1]) : null
+}
+
+export function rutaAlertasDeInmueble(inmuebleId) {
+  return `${RUTA_PANEL}/${inmuebleId}/alertas`
 }
 
 // A dónde hay que mandar a la persona, o null si ya está donde corresponde:
@@ -46,6 +54,12 @@ export default function Rutas() {
 
   if (!sesionVerificada) return <Verificando />
   if (destino) return null // redirigiendo: no se muestra nada privado ni un parpadeo del formulario
-  return estaAutenticado ? <PanelInmuebles /> : <AccesoPage />
-}
+  if (!estaAutenticado) return <AccesoPage />
 
+  const inmuebleIdAlertas = extraerInmuebleIdDeRutaAlertas(ruta)
+  if (inmuebleIdAlertas !== null) {
+    return <PanelAlertas inmuebleId={inmuebleIdAlertas} />
+  }
+
+  return <PanelInmuebles />
+}

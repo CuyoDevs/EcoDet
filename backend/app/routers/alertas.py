@@ -1,26 +1,100 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List
+"""Endpoints para consulta y detalle de alertas de consumo (HU-15 / DET-23, DET-96)."""
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session, joinedload
 
-# Ajusta las importaciones según la estructura de tu proyecto (database y models)
 from ..database import get_db
-from ..models import Alerta # Asegúrate de que el modelo Alerta esté definido en models.py
+from ..dependencies import get_current_user
+from ..models import (
+    Alerta,
+    EstadoAlertaEnum,
+    Inmueble,
+    Lectura,
+    ServicioEnum,
+    Usuario,
+)
+from ..schemas import AlertaDetalleOut
 
-router = APIRouter(prefix="/api/alertas", tags=["Alertas"])
+router = APIRouter(tags=["alertas"])
 
-@router.get("/", response_model=List[dict])
-def listar_alertas(db: Session = Depends(get_db)):
-    """Obtiene la lista de todas las alertas."""
-    alertas = db.query(Alerta).all()
-    return alertas
 
-@router.get("/{alerta_id}")
-def obtener_detalle_alerta(alerta_id: int, db: Session = Depends(get_db)):
-    """Obtiene el detalle específico de una alerta por su ID (DET-23)."""
-    alerta = db.query(Alerta).filter(Alerta.id == alerta_id).first()
-    if not alerta:
-        raise HTTPException(
+def _serializar_alerta(alerta: Alerta) -> AlertaDetalleOut:
+    lectura = alerta.lectura
+    return AlertaDetalleOut(
+        id=alerta.id,
+        lectura_id=alerta.lectura_id,
+        inmueble_id=lectura.inmueble_id,
+        servicio=lectura.servicio,
+        fecha_inicio=lectura.fecha_inicio,
+        fecha_fin=lectura.fecha_fin,
+        consumo=lectura.consumo,
+        tipo=alerta.tipo,
+        estado=alerta.estado,
+        desvio_porcentual=alerta.desvio_porcentual,
+        consumo_por_dia=alerta.consumo_por_dia,
+        consumo_habitual_por_dia=alerta.consumo_habitual_por_dia,
+        fecha_creacion=alerta.fecha_creacion,
+    )
+
+
+def _buscar_alerta_del_usuario(db: Session, alerta_id: int, usuario: Usuario) -> Alerta | None:
+    return (
+        db.query(Alerta)
+        .options(joinedload(Alerta.lectura))
+        .join(Lectura, Alerta.lectura_id == Lectura.id)
+        .join(Inmueble, Lectura.inmueble_id == Inmueble.id)
+        .filter(Alerta.id == alerta_id, Inmueble.usuario_id == usuario.id)
+        .first()
+    )
+
+
+@router.get("/api/inmuebles/{inmueble_id}/alertas", response_model=list[AlertaDetalleOut])
+def listar_alertas_inmueble(
+    inmueble_id: int,
+    estado: EstadoAlertaEnum | None = None,
+    servicio: ServicioEnum | None = None,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    """Lista las alertas de un inmueble del usuario autenticado con filtros opcionales (DET-96)."""
+    inmueble = (
+        db.query(Inmueble)
+        .filter(Inmueble.id == inmueble_id, Inmueble.usuario_id == usuario.id)
+        .first()
+    )
+    if not inmueble:
+        return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="La alerta solicitada no existe."
+            content={"errores": {"general": "Inmueble no encontrado."}},
         )
-    return alerta
+
+    query = (
+        db.query(Alerta)
+        .options(joinedload(Alerta.lectura))
+        .join(Lectura, Alerta.lectura_id == Lectura.id)
+        .filter(Lectura.inmueble_id == inmueble_id)
+    )
+
+    if estado is not None:
+        query = query.filter(Alerta.estado == estado)
+    if servicio is not None:
+        query = query.filter(Lectura.servicio == servicio)
+
+    alertas = query.order_by(Lectura.fecha_fin.desc(), Alerta.id.desc()).all()
+    return [_serializar_alerta(a) for a in alertas]
+
+
+@router.get("/api/alertas/{alerta_id}", response_model=AlertaDetalleOut)
+def obtener_detalle_alerta(
+    alerta_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    """Obtiene el detalle de una alerta verificando que pertenezca al usuario (RN-01)."""
+    alerta = _buscar_alerta_del_usuario(db, alerta_id, usuario)
+    if not alerta:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"errores": {"general": "Alerta no encontrada."}},
+        )
+    return _serializar_alerta(alerta)

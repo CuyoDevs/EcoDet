@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Inmueble, Usuario
+from ..models import Alerta, EstadoAlertaEnum, Inmueble, Lectura, Usuario
 from ..schemas import InmuebleIn, InmuebleOut
 from ..dependencies import get_current_user
 
@@ -15,13 +16,39 @@ def listar_inmuebles(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    """Devuelve solo los inmuebles del usuario autenticado (RN-01)."""
-    return (
+    """Devuelve solo los inmuebles del usuario autenticado (RN-01) con su conteo de alertas pendientes (DET-91)."""
+    inmuebles = (
         db.query(Inmueble)
         .filter(Inmueble.usuario_id == usuario.id)
         .order_by(Inmueble.id)
         .all()
     )
+    if not inmuebles:
+        return []
+
+    inmueble_ids = [i.id for i in inmuebles]
+    conteos_raw = (
+        db.query(Lectura.inmueble_id, func.count(Alerta.id))
+        .join(Alerta, Alerta.lectura_id == Lectura.id)
+        .filter(
+            Lectura.inmueble_id.in_(inmueble_ids),
+            Alerta.estado == EstadoAlertaEnum.PENDIENTE,
+        )
+        .group_by(Lectura.inmueble_id)
+        .all()
+    )
+    conteos_por_inmueble = dict(conteos_raw)
+
+    return [
+        InmuebleOut(
+            id=inmueble.id,
+            usuario_id=inmueble.usuario_id,
+            nombre=inmueble.nombre,
+            direccion=inmueble.direccion,
+            alertas_pendientes=conteos_por_inmueble.get(inmueble.id, 0),
+        )
+        for inmueble in inmuebles
+    ]
 
 
 @router.post("/", response_model=InmuebleOut, status_code=status.HTTP_201_CREATED)
