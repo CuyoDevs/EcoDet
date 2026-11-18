@@ -79,6 +79,7 @@ function GraficoPeriodoAlerta({ alerta }) {
   }
 
   return (
+<<<<<<< HEAD
     <div className="h-56 w-full rounded-lg border border-slate-100 bg-slate-50/60 p-3">
       <Bar data={data} options={options} aria-label="Gráfico comparativo de consumo del período" />
     </div>
@@ -419,4 +420,56 @@ export default function PanelAlertas({ inmuebleId }) {
       </main>
     </div>
   )
+=======
+    <div className="container mt-4">
+      <h2>EcoDet - Mis Alertas</h2>
+      
+      {/* Si hay un error, lo mostramos limpio y evitamos renderizar el grid confuso */}
+      {error ? (
+        <div className="alert alert-danger mt-3" role="alert">
+          {error}
+        </div>
+      ) : (
+        <div className="row mt-3">
+          {/* Columna de Listado */}
+          <div className="col-md-6">
+            <h4>Listado de Alertas</h4>
+            {alertas.length === 0 ? (
+              <p className="text-muted">No hay alertas registradas.</p>
+            ) : (
+              <ul className="list-group">
+                {alertas.map(alerta => (
+                  <li 
+                    key={alerta.id} 
+                    className="list-group-item list-group-item-action"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => verDetalle(alerta.id)}
+                  >
+                    <strong>{alerta.titulo || `Alerta #${alerta.id}`}</strong> 
+                    <span className="float-end badge bg-secondary">{alerta.estado}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Columna de Detalle */}
+          <div className="col-md-6">
+            <h4>Detalle de la Alerta</h4>
+            {alertaSeleccionada ? (
+              <div className="card p-3 shadow-sm">
+                <h5 className="text-primary">{alertaSeleccionada.titulo}</h5>
+                <p><strong>Descripción:</strong> {alertaSeleccionada.descripcion}</p>
+                <p><strong>Estado:</strong> <span className="badge bg-info">{alertaSeleccionada.estado}</span></p>
+                <p><strong>Fecha de Creación:</strong> {alertaSeleccionada.fecha_creacion || 'N/A'}</p>
+              </div>
+            ) : (
+              <p className="text-muted">Selecciona una alerta de la lista para ver sus detalles completos.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+>>>>>>> a71d287 (Corregir alertas_pendientes en PUT inmuebles, manejo de errores en PanelAlertas y tests de rutas)
 }
