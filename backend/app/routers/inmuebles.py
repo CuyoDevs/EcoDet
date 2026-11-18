@@ -4,7 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Alerta, EstadoAlertaEnum, Inmueble, Lectura, Usuario
+from ..models import Inmueble, Usuario, Lectura, Alerta, EstadoAlertaEnum
 from ..schemas import InmuebleIn, InmuebleOut
 from ..dependencies import get_current_user
 
@@ -123,6 +123,19 @@ def actualizar_inmueble(
     db.commit()
     db.refresh(inmueble)
 
+    # Calculamos de forma dinámica y segura el número real de alertas pendientes para este inmueble
+    conteo_alertas = (
+        db.query(func.count(Alerta.id))
+        .join(Lectura, Alerta.lectura_id == Lectura.id)
+        .filter(
+            Lectura.inmueble_id == inmueble.id,
+            Alerta.estado == EstadoAlertaEnum.PENDIENTE,
+        )
+        .scalar()
+    ) or 0
+
+    setattr(inmueble, "alertas_pendientes", conteo_alertas)
+
     return inmueble
 
 
@@ -133,20 +146,13 @@ def eliminar_inmueble(
     usuario: Usuario = Depends(get_current_user)
 ):
     """
-    Elimina un inmueble del usuario autenticado junto con todos sus datos asociados:
-    lecturas, alertas y umbrales (HU-07 / DET-15). Responde 204 sin cuerpo.
-
-    El borrado en cascada lo hace el ORM (`cascade="all, delete-orphan"` en `Inmueble.lecturas`,
-    `Inmueble.umbrales` y `Lectura.alerta`): no depende de que SQLite tenga activadas las claves
-    foráneas, así que por eso se borra con `db.delete()` y no con un DELETE masivo.
-    También sirve para el inmueble de demostración (HU-19).
+    Elimina un inmueble del usuario autenticado junto con todos sus datos asociados.
     """
     inmueble = db.query(Inmueble).filter(
         Inmueble.id == inmueble_id,
         Inmueble.usuario_id == usuario.id
     ).first()
 
-    # RN-01: el inmueble de otro usuario responde igual que uno inexistente.
     if not inmueble:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
