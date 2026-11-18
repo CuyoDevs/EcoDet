@@ -24,3 +24,16 @@ export function useRutaHash() {
   }, [])
   return ruta
 }
+// frontend/src/routes/hashRouter.js
+
+export const RUTA_ACCESO = '/acceso'
+export const RUTA_PANEL = '/inmuebles'
+
+export function rutaAlertasDeInmueble(inmuebleId) {
+  return `/inmuebles/${inmuebleId}/alertas`
+}
+
+export function extraerInmuebleIdDeRutaAlertas(ruta) {
+  const match = ruta.match(/^\/inmuebles\/(\d+)\/alertas$/)
+  return match ? parseInt(match[1], 10) : null
+}

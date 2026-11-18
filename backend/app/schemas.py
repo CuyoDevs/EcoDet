@@ -1,7 +1,10 @@
 """Esquemas Pydantic V2 de la API (DET-30)."""
+from datetime import date, datetime
 import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .models import EstadoAlertaEnum, ServicioEnum, TipoAlertaEnum
 
 _CORREO_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$")
 
@@ -80,7 +83,8 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     usuario: UsuarioOut
-    
+
+
 class InmuebleIn(BaseModel):
     nombre: str
     direccion: str | None = None
@@ -95,15 +99,16 @@ class InmuebleIn(BaseModel):
             raise ValueError("El nombre no puede superar los 100 caracteres.")
         return v
 
+
 class InmuebleOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
     id: int
     usuario_id: int
     nombre: str
     direccion: str | None = None
+    alertas_pendientes: int = 0
 
-from datetime import date, datetime
-from .models import ServicioEnum, TipoAlertaEnum, EstadoAlertaEnum
 
 class LecturaIn(BaseModel):
     inmueble_id: int
@@ -136,6 +141,7 @@ class LecturaIn(BaseModel):
             raise ValueError('La fecha de fin no puede ser posterior a hoy.')
         return v
 
+
 class LecturaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -160,8 +166,18 @@ class AlertaOut(BaseModel):
     fecha_creacion: datetime
 
 
+class AlertaDetalleOut(AlertaOut):
+    """Alerta enriquecida con servicio y período de su lectura (HU-15 / DET-96)."""
+
+    inmueble_id: int
+    servicio: ServicioEnum
+    fecha_inicio: date
+    fecha_fin: date
+    consumo: float
+
+
 class EvaluacionOut(BaseModel):
-    """Resultado del detector para una lectura (HU-12 y HU-13 / HU-14)."""
+    """Resultado del detector para una lectura (HU-12 y HU-13 / DET-87)."""
 
     model_config = ConfigDict(from_attributes=True)
 
