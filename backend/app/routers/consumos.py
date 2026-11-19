@@ -11,7 +11,7 @@ from ..models import Lectura, Inmueble, Usuario, ServicioEnum, Alerta
 from ..schemas import (
     LecturaIn, LecturaOut, LecturaEdicionIn, CargaLoteIn, CargaLoteOut,
     HistorialInmuebleOut, HistorialServicioOut, LecturaHistorialOut,
-    EstadisticasServicio, EvaluacionOut, LecturaCreadaOut, LecturaLoteOut,
+    EstadisticasServicio, FranjaHabitualOut, EvaluacionOut, LecturaCreadaOut, LecturaLoteOut,
     AlertaOut,
 )
 from ..dependencies import get_current_user
@@ -21,6 +21,8 @@ from ..services.detector import (
     lecturas_faltantes_para_activar,
     reemplazar_alerta_de_lectura,
     alerta_desde_resultado,
+    calcular_limites,
+    umbral_vigente,
     EstadoEvaluacion,
     ResultadoEvaluacion,
 )
@@ -417,12 +419,27 @@ def obtener_historial(
 
         estadisticas_raw = _calcular_estadisticas(lecturas_db)
         estadisticas = EstadisticasServicio(**estadisticas_raw) if estadisticas_raw else None
+        franja_habitual = None
+        if detector_activo:
+            consumos_por_dia = [lectura.consumo_por_dia for lectura in lecturas_db]
+            umbral = umbral_vigente(db, inmueble_id, srv)
+            promedio, _desvio, limite_inferior, limite_superior = calcular_limites(
+                consumos_por_dia,
+                umbral,
+            )
+            franja_habitual = FranjaHabitualOut(
+                promedio=round(promedio, 4),
+                umbral=round(umbral, 4),
+                limite_inferior=round(limite_inferior, 4),
+                limite_superior=round(limite_superior, 4),
+            )
 
         resultado[srv.value] = HistorialServicioOut(
             detector_activo=detector_activo,
             lecturas_faltantes=lecturas_faltantes_para_activar(len(lecturas_db)),
             lecturas=lecturas_out,
             estadisticas=estadisticas,
+            franja_habitual=franja_habitual,
         )
 
     return resultado
