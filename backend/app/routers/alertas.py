@@ -1,4 +1,4 @@
-"""Endpoints para consulta y detalle de alertas de consumo (HU-15 / DET-23, DET-96)."""
+"""Endpoints de alertas de consumo: consulta y detalle (HU-15 / DET-23, DET-96) y marcado como normal (HU-16 / DET-100)."""
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
@@ -48,6 +48,14 @@ def _buscar_alerta_del_usuario(db: Session, alerta_id: int, usuario: Usuario) ->
     )
 
 
+def _alerta_no_encontrada() -> JSONResponse:
+    """RN-01: una alerta ajena responde igual que una inexistente."""
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"errores": {"general": "Alerta no encontrada."}},
+    )
+
+
 @router.get("/api/inmuebles/{inmueble_id}/alertas", response_model=list[AlertaDetalleOut])
 def listar_alertas_inmueble(
     inmueble_id: int,
@@ -93,8 +101,34 @@ def obtener_detalle_alerta(
     """Obtiene el detalle de una alerta verificando que pertenezca al usuario (RN-01)."""
     alerta = _buscar_alerta_del_usuario(db, alerta_id, usuario)
     if not alerta:
+        return _alerta_no_encontrada()
+    return _serializar_alerta(alerta)
+
+
+@router.patch("/api/alertas/{alerta_id}/normal", response_model=AlertaDetalleOut)
+def marcar_alerta_normal(
+    alerta_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    """Marca como "normal" una alerta pendiente del usuario autenticado (HU-16 / DET-100, RN-13).
+
+    Solo cambia el estado de esta alerta. A partir de ahora el detector deja su lectura fuera de
+    la referencia de las evaluaciones nuevas (RN-11, ver `detector._integran_referencia`), y las
+    alertas que ya existen para otras lecturas no se recalculan (RN-17).
+    """
+    alerta = _buscar_alerta_del_usuario(db, alerta_id, usuario)
+    if not alerta:
+        return _alerta_no_encontrada()
+
+    # RN-13: la alerta nace Pendiente y de ahí pasa a Confirmada o Normal; no se vuelve a decidir.
+    if alerta.estado != EstadoAlertaEnum.PENDIENTE:
         return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"errores": {"general": "Alerta no encontrada."}},
+            status_code=status.HTTP_409_CONFLICT,
+            content={"errores": {"general": "Solo se puede marcar como normal una alerta pendiente."}},
         )
+
+    alerta.estado = EstadoAlertaEnum.NORMAL
+    db.commit()
+    db.refresh(alerta)
     return _serializar_alerta(alerta)

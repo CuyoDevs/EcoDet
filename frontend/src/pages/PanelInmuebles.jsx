@@ -8,16 +8,7 @@ import EliminarInmuebleModal from '../components/EliminarInmuebleModal'
 import FormularioConsumo from '../components/FormularioConsumo'
 import HistorialConsumos from '../components/HistorialConsumos'
 import { listarInmuebles, crearInmueble, actualizarInmueble, eliminarInmueble } from '../api/inmuebles'
-<<<<<<< HEAD
-import { irA } from '../routes/hashRouter'
-import { rutaAlertasDeInmueble } from '../routes/Rutas'
-=======
-// Antes (causaba la dependencia circular):
-// import { rutaAlertasDeInmueble } from '../routes/Rutas'
-
-// Ahora (limpio y sin ciclos):
-import { rutaAlertasDeInmueble } from '../routes/hashRouter'
->>>>>>> a71d287 (Corregir alertas_pendientes en PUT inmuebles, manejo de errores en PanelAlertas y tests de rutas)
+import { irA, rutaAlertasDeInmueble } from '../routes/hashRouter'
 
 export const MENSAJE_NOMBRE_VACIO = 'Ingresa un nombre para el inmueble.'
 
