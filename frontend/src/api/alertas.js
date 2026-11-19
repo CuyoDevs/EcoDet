@@ -15,3 +15,9 @@ export function listarAlertasInmueble(inmuebleId, { estado = '', servicio = '' }
 export function obtenerDetalleAlerta(alertaId) {
   return apiFetch(`/api/alertas/${alertaId}`)
 }
+
+// PATCH /api/alertas/{alertaId}/normal -> la alerta ya con estado NORMAL, con el mismo formato que el detalle (HU-16 / DET-100, RN-13).
+// 404 { errores: { general } } si no existe o es de otro usuario (RN-01); 409 si la alerta ya no está pendiente.
+export function marcarAlertaNormal(alertaId) {
+  return apiFetch(`/api/alertas/${alertaId}/normal`, { method: 'PATCH' })
+}

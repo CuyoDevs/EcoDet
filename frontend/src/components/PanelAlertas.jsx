@@ -1,6 +1,7 @@
-// PanelAlertas.jsx — HU-15 / DET-23, DET-97
+// PanelAlertas.jsx — HU-15 / DET-23, DET-97 · HU-16 / DET-102
 // Vista W5: lista las alertas de un inmueble con filtros por servicio y estado,
 // estado vacío ("consumo dentro de lo normal") y detalle con gráfico del período.
+// Una alerta pendiente se puede marcar como "normal" previa confirmación (RN-11, RN-13, RN-17).
 import React, { useEffect, useState } from 'react'
 import { AlertTriangle, ArrowLeft, CheckCircle2, TrendingDown, TrendingUp } from 'lucide-react'
 import {
@@ -13,9 +14,10 @@ import {
   Tooltip,
 } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
-import { listarAlertasInmueble, obtenerDetalleAlerta } from '../api/alertas'
+import { listarAlertasInmueble, marcarAlertaNormal, obtenerDetalleAlerta } from '../api/alertas'
 import { listarInmuebles } from '../api/inmuebles'
 import { irA } from '../routes/hashRouter'
+import MarcarAlertaNormalModal from './MarcarAlertaNormalModal'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
@@ -24,8 +26,8 @@ const ETIQUETAS_SERVICIO = { LUZ: 'Luz', GAS: 'Gas', AGUA: 'Agua' }
 
 const ESTILOS_ESTADO = {
   PENDIENTE: 'bg-amber-100 text-amber-800 border-amber-200',
-  CONFIRMADA: 'bg-red-100 text-red-800 border-red-200',
-  NORMAL: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  CONFIRMADA: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  NORMAL: 'bg-slate-100 text-slate-600 border-slate-200',
 }
 
 function formatearDesvio(desvio) {
@@ -79,7 +81,6 @@ function GraficoPeriodoAlerta({ alerta }) {
   }
 
   return (
-<<<<<<< HEAD
     <div className="h-56 w-full rounded-lg border border-slate-100 bg-slate-50/60 p-3">
       <Bar data={data} options={options} aria-label="Gráfico comparativo de consumo del período" />
     </div>
@@ -98,6 +99,13 @@ export default function PanelAlertas({ inmuebleId }) {
   const [alertaSeleccionada, setAlertaSeleccionada] = useState(null)
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
   const [errorDetalle, setErrorDetalle] = useState('')
+
+  // HU-16: marcar como normal (con confirmación previa) y aviso de que se aplicó.
+  const [alertaParaNormal, setAlertaParaNormal] = useState(null)
+  const [marcandoNormal, setMarcandoNormal] = useState(false)
+  const [errorNormal, setErrorNormal] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [recarga, setRecarga] = useState(0) // se incrementa para volver a pedir la lista
 
   useEffect(() => {
     let activo = true
@@ -140,9 +148,10 @@ export default function PanelAlertas({ inmuebleId }) {
     return () => {
       activo = false
     }
-  }, [inmuebleId, filtroServicio, filtroEstado])
+  }, [inmuebleId, filtroServicio, filtroEstado, recarga])
 
   const seleccionarAlerta = async (alerta) => {
+    setAviso('')
     setErrorDetalle('')
     setCargandoDetalle(true)
     try {
@@ -152,6 +161,46 @@ export default function PanelAlertas({ inmuebleId }) {
       setErrorDetalle(err.errores?.general || err.message || 'No se pudo cargar el detalle de la alerta.')
     } finally {
       setCargandoDetalle(false)
+    }
+  }
+
+  const abrirMarcarNormal = (alerta) => {
+    setErrorNormal('')
+    setAlertaParaNormal(alerta)
+  }
+
+  // Cancelar cierra el diálogo sin tocar nada: la alerta queda como estaba.
+  const cancelarMarcarNormal = () => {
+    setAlertaParaNormal(null)
+    setErrorNormal('')
+  }
+
+  // HU-16 / DET-102: confirma el diálogo, llama al endpoint y refleja el cambio en el momento.
+  const confirmarMarcarNormal = async () => {
+    if (!alertaParaNormal) return
+    setMarcandoNormal(true)
+    setErrorNormal('')
+    try {
+      const actualizada = await marcarAlertaNormal(alertaParaNormal.id)
+      // Con un filtro de estado activo (por ejemplo "Pendiente") la alerta ya no coincide y sale de la lista.
+      const sigueEnLaLista = !filtroEstado || filtroEstado === actualizada.estado
+      setAlertas((actuales) =>
+        sigueEnLaLista
+          ? actuales.map((a) => (a.id === actualizada.id ? actualizada : a))
+          : actuales.filter((a) => a.id !== actualizada.id)
+      )
+      setAlertaSeleccionada((actual) => {
+        if (!actual || actual.id !== actualizada.id) return actual
+        return sigueEnLaLista ? actualizada : null
+      })
+      setAviso('Marcada como normal: esta lectura se excluirá de los próximos cálculos.')
+      setAlertaParaNormal(null)
+    } catch (err) {
+      setErrorNormal(err.errores?.general || err.message || 'No se pudo marcar la alerta como normal.')
+      // 404 / 409: la alerta cambió o ya no existe; se vuelve a pedir la lista para mostrar su estado real.
+      if (err.status === 404 || err.status === 409) setRecarga((n) => n + 1)
+    } finally {
+      setMarcandoNormal(false)
     }
   }
 
@@ -235,6 +284,16 @@ export default function PanelAlertas({ inmuebleId }) {
             </button>
           )}
         </section>
+
+        {aviso && (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
+          >
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{aviso}</span>
+          </div>
+        )}
 
         {errorLista && (
           <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -406,6 +465,31 @@ export default function PanelAlertas({ inmuebleId }) {
                   </dl>
 
                   <GraficoPeriodoAlerta alerta={alertaSeleccionada} />
+
+                  {alertaSeleccionada.estado === 'PENDIENTE' && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                      <p className="max-w-xs text-xs text-slate-500">
+                        Si este consumo tenía una explicación, marcarlo como normal evita que cuente en las próximas
+                        detecciones.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => abrirMarcarNormal(alertaSeleccionada)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                      >
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                        Marcar como normal
+                      </button>
+                    </div>
+                  )}
+
+                  {alertaSeleccionada.estado === 'NORMAL' && (
+                    <p className="flex items-start gap-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+                      Esta alerta fue marcada como normal: su lectura no se usa para calcular lo habitual en las
+                      próximas detecciones.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
@@ -418,58 +502,17 @@ export default function PanelAlertas({ inmuebleId }) {
           </div>
         )}
       </main>
-    </div>
-  )
-=======
-    <div className="container mt-4">
-      <h2>EcoDet - Mis Alertas</h2>
-      
-      {/* Si hay un error, lo mostramos limpio y evitamos renderizar el grid confuso */}
-      {error ? (
-        <div className="alert alert-danger mt-3" role="alert">
-          {error}
-        </div>
-      ) : (
-        <div className="row mt-3">
-          {/* Columna de Listado */}
-          <div className="col-md-6">
-            <h4>Listado de Alertas</h4>
-            {alertas.length === 0 ? (
-              <p className="text-muted">No hay alertas registradas.</p>
-            ) : (
-              <ul className="list-group">
-                {alertas.map(alerta => (
-                  <li 
-                    key={alerta.id} 
-                    className="list-group-item list-group-item-action"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => verDetalle(alerta.id)}
-                  >
-                    <strong>{alerta.titulo || `Alerta #${alerta.id}`}</strong> 
-                    <span className="float-end badge bg-secondary">{alerta.estado}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
 
-          {/* Columna de Detalle */}
-          <div className="col-md-6">
-            <h4>Detalle de la Alerta</h4>
-            {alertaSeleccionada ? (
-              <div className="card p-3 shadow-sm">
-                <h5 className="text-primary">{alertaSeleccionada.titulo}</h5>
-                <p><strong>Descripción:</strong> {alertaSeleccionada.descripcion}</p>
-                <p><strong>Estado:</strong> <span className="badge bg-info">{alertaSeleccionada.estado}</span></p>
-                <p><strong>Fecha de Creación:</strong> {alertaSeleccionada.fecha_creacion || 'N/A'}</p>
-              </div>
-            ) : (
-              <p className="text-muted">Selecciona una alerta de la lista para ver sus detalles completos.</p>
-            )}
-          </div>
-        </div>
+      {alertaParaNormal && (
+        <MarcarAlertaNormalModal
+          alerta={alertaParaNormal}
+          servicio={ETIQUETAS_SERVICIO[alertaParaNormal.servicio] ?? alertaParaNormal.servicio}
+          error={errorNormal}
+          enviando={marcandoNormal}
+          onConfirmar={confirmarMarcarNormal}
+          onCancelar={cancelarMarcarNormal}
+        />
       )}
     </div>
-  );
->>>>>>> a71d287 (Corregir alertas_pendientes en PUT inmuebles, manejo de errores en PanelAlertas y tests de rutas)
+  )
 }
