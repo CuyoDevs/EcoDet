@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { BarChart2, Bell, LogOut, Pencil, Plus, Trash2, Zap } from 'lucide-react'
+import { BarChart2, Bell, LogOut, Pencil, Plus, Sparkles, Trash2, Zap } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import PanelVacio from '../components/PanelVacio'
 import CampoFormulario from '../components/CampoFormulario'
@@ -7,14 +7,28 @@ import EditarInmuebleModal from '../components/EditarInmuebleModal'
 import EliminarInmuebleModal from '../components/EliminarInmuebleModal'
 import FormularioConsumo from '../components/FormularioConsumo'
 import HistorialConsumos from '../components/HistorialConsumos'
-import { listarInmuebles, crearInmueble, actualizarInmueble, eliminarInmueble } from '../api/inmuebles'
+import {
+  listarInmuebles,
+  crearInmueble,
+  actualizarInmueble,
+  eliminarInmueble,
+  cargarDatosDeEjemplo,
+} from '../api/inmuebles'
 import { irA, rutaAlertasDeInmueble } from '../routes/hashRouter'
 
 export const MENSAJE_NOMBRE_VACIO = 'Ingresa un nombre para el inmueble.'
 
+// Colores del aviso de "Cargar datos de ejemplo" (HU-19 / DET-27).
+const ESTILOS_AVISO_DEMO = {
+  exito: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  aviso: 'border-amber-200 bg-amber-50 text-amber-900',
+  error: 'border-red-200 bg-red-50 text-red-700',
+}
+
 // Panel "Mis inmuebles" (W2): lista los inmuebles del usuario, permite crear uno nuevo (HU-05),
 // editarlo (HU-06), eliminarlo (HU-07), registrar consumo (HU-08), ver el historial (HU-10)
-// y consultar las alertas pendientes por inmueble (HU-15 / DET-98).
+// consultar las alertas pendientes por inmueble (HU-15 / DET-98) y cargar un inmueble de
+// demostración con anomalías conocidas (HU-19 / DET-27).
 export default function PanelInmuebles() {
   const { usuario, logout } = useAuth()
   const [inmuebles, setInmuebles] = useState([])
@@ -31,6 +45,8 @@ export default function PanelInmuebles() {
   const [eliminando, setEliminando] = useState(null) // inmueble pendiente de confirmar su borrado (HU-07)
   const [errorEliminacion, setErrorEliminacion] = useState('')
   const [borrando, setBorrando] = useState(false)
+  const [cargandoDemo, setCargandoDemo] = useState(false)
+  const [avisoDemo, setAvisoDemo] = useState(null) // { tipo: 'exito' | 'aviso' | 'error', texto }
 
   const recargarInmuebles = useCallback(() => {
     return listarInmuebles().then((lista) => setInmuebles(lista))
@@ -49,6 +65,7 @@ export default function PanelInmuebles() {
   }, [])
 
   const abrirOCerrarFormulario = () => {
+    setAvisoDemo(null)
     setErrores({})
     setErrorGeneral('')
     setInmuebleParaConsumo(null)
@@ -72,6 +89,7 @@ export default function PanelInmuebles() {
   }, [])
 
   const abrirEliminacion = (inmueble) => {
+    setAvisoDemo(null)
     setMostrandoFormulario(false)
     setInmuebleParaConsumo(null)
     setInmuebleParaHistorial(null)
@@ -179,12 +197,35 @@ export default function PanelInmuebles() {
     }
   }
 
+  // HU-19 / DET-27: crea el inmueble de demostración. Si el usuario ya lo tiene (409) avisa y no se
+  // duplica (RN-16); para volver a cargarlo hay que eliminar el actual (HU-07).
+  const cargarDemo = async () => {
+    setAvisoDemo(null)
+    setErrorGeneral('')
+    setCargandoDemo(true)
+    try {
+      const demo = await cargarDatosDeEjemplo()
+      const pendientes = demo.alertas_pendientes ?? 0
+      setInmuebles((actuales) => [...actuales, { ...demo, alertas_pendientes: pendientes }])
+      setAvisoDemo({
+        tipo: 'exito',
+        texto: `Cargamos "${demo.nombre}" con ${pendientes} ${
+          pendientes === 1 ? 'alerta pendiente' : 'alertas pendientes'
+        } para que pruebes el detector.`,
+      })
+    } catch (err) {
+      setAvisoDemo({ tipo: err.status === 409 ? 'aviso' : 'error', texto: err.errores?.general ?? err.message })
+    } finally {
+      setCargandoDemo(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Mis inmuebles</h1>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-4">
             {usuario?.nombre && <span className="text-sm text-slate-500">{usuario.nombre}</span>}
 
             <button
@@ -194,6 +235,16 @@ export default function PanelInmuebles() {
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               Nuevo inmueble
+            </button>
+
+            <button
+              type="button"
+              onClick={cargarDemo}
+              disabled={cargandoDemo}
+              className="inline-flex items-center gap-2 rounded-lg border border-teal-600 px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-600 disabled:opacity-60"
+            >
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              {cargandoDemo ? 'Cargando ejemplo…' : 'Cargar datos de ejemplo'}
             </button>
 
             <button
@@ -212,6 +263,15 @@ export default function PanelInmuebles() {
         {errorGeneral && (
           <p role="alert" className="mb-4 text-sm text-red-600">
             {errorGeneral}
+          </p>
+        )}
+
+        {avisoDemo && (
+          <p
+            role={avisoDemo.tipo === 'exito' ? 'status' : 'alert'}
+            className={`rounded-lg border px-4 py-3 text-sm ${ESTILOS_AVISO_DEMO[avisoDemo.tipo]}`}
+          >
+            {avisoDemo.texto}
           </p>
         )}
 
@@ -307,16 +367,26 @@ export default function PanelInmuebles() {
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold text-slate-900 text-lg">{inm.nombre}</h3>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-slate-900 text-lg">{inm.nombre}</h3>
+                        {inm.es_demo && (
+                          <span className="mt-1 inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
+                            Demostración
+                          </span>
+                        )}
+                      </div>
                       <div className="flex shrink-0 gap-1">
-                        <button
-                          type="button"
-                          onClick={() => abrirEdicion(inm)}
-                          aria-label={`Editar ${inm.nombre}`}
-                          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                        >
-                          <Pencil className="h-4 w-4" aria-hidden="true" />
-                        </button>
+                        {/* W2: el inmueble de demostración solo se puede eliminar, no editar. */}
+                        {!inm.es_demo && (
+                          <button
+                            type="button"
+                            onClick={() => abrirEdicion(inm)}
+                            aria-label={`Editar ${inm.nombre}`}
+                            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                          >
+                            <Pencil className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => abrirEliminacion(inm)}

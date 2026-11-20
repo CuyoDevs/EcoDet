@@ -5,13 +5,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import PanelInmuebles, { MENSAJE_NOMBRE_VACIO } from './PanelInmuebles'
 import { AuthProvider } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
-import { listarInmuebles, crearInmueble, actualizarInmueble, eliminarInmueble } from '../api/inmuebles'
+import {
+  listarInmuebles,
+  crearInmueble,
+  actualizarInmueble,
+  eliminarInmueble,
+  cargarDatosDeEjemplo,
+} from '../api/inmuebles'
 
 vi.mock('../api/inmuebles', () => ({
   listarInmuebles: vi.fn(),
   crearInmueble: vi.fn(),
   actualizarInmueble: vi.fn(),
-  eliminarInmueble: vi.fn()
+  eliminarInmueble: vi.fn(),
+  cargarDatosDeEjemplo: vi.fn()
 }))
 
 const CASA = { id: 1, usuario_id: 1, nombre: 'Casa Norte', direccion: 'Ruta 40' }
@@ -38,6 +45,7 @@ beforeEach(() => {
   crearInmueble.mockReset()
   actualizarInmueble.mockReset()
   eliminarInmueble.mockReset()
+  cargarDatosDeEjemplo.mockReset()
 })
 
 describe('PanelInmuebles · lista (HU-05, criterio 1)', () => {
@@ -396,5 +404,114 @@ describe('PanelInmuebles · contador de alertas (HU-15 / DET-98)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Ver alertas de Casa Norte' }))
     expect(window.location.hash).toBe('#/inmuebles/1/alertas')
+  })
+})
+
+describe('PanelInmuebles · datos de ejemplo (HU-19 / DET-27)', () => {
+  const DEMO = {
+    id: 7,
+    usuario_id: 1,
+    nombre: 'Demo (ejemplo)',
+    direccion: 'Inmueble de demostración',
+    es_demo: true,
+    alertas_pendientes: 9
+  }
+  const cargarEjemplo = (user) => user.click(screen.getByRole('button', { name: 'Cargar datos de ejemplo' }))
+
+  it('ofrece "Cargar datos de ejemplo" junto a "Nuevo inmueble"', async () => {
+    await montar([])
+
+    expect(await screen.findByRole('button', { name: 'Cargar datos de ejemplo' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /nuevo inmueble/i })).toBeInTheDocument()
+  })
+
+  it('crea el inmueble de demostración, avisa y lo agrega a la lista con sus alertas', async () => {
+    cargarDatosDeEjemplo.mockResolvedValue(DEMO)
+    const user = await montar([])
+    await screen.findByText(/todavía no tienes ningún inmueble/i)
+
+    await cargarEjemplo(user)
+
+    await waitFor(() => expect(cargarDatosDeEjemplo).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('status')).toHaveTextContent(/Demo \(ejemplo\).*9 alertas pendientes/)
+    expect(screen.getByRole('heading', { name: 'Demo (ejemplo)' })).toBeInTheDocument()
+    expect(screen.getByText('Demostración')).toBeInTheDocument()
+    expect(screen.getByLabelText('9 alertas pendientes')).toHaveTextContent('9')
+    expect(screen.queryByText(/todavía no tienes ningún inmueble/i)).not.toBeInTheDocument()
+  })
+
+  it('el inmueble de demostración se puede eliminar pero no editar; los demás conservan "Editar"', async () => {
+    cargarDatosDeEjemplo.mockResolvedValue(DEMO)
+    const user = await montar([CASA])
+    await screen.findByText('Casa Norte')
+
+    await cargarEjemplo(user)
+    await screen.findByText('Demostración')
+
+    expect(screen.getByRole('button', { name: 'Editar Casa Norte' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Editar Demo (ejemplo)' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Eliminar Demo (ejemplo)' })).toBeInTheDocument()
+  })
+
+  it('si ya cargó los datos de ejemplo (409) avisa y no agrega otro inmueble', async () => {
+    cargarDatosDeEjemplo.mockRejectedValue(
+      new ApiError(409, {
+        errores: {
+          general:
+            'Ya cargaste los datos de ejemplo. Elimina el inmueble de demostración si quieres volver a cargarlos.'
+        }
+      })
+    )
+    const user = await montar([DEMO])
+    await screen.findByText('Demo (ejemplo)')
+
+    await cargarEjemplo(user)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ya cargaste los datos de ejemplo.')
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('sin conexión muestra el aviso y no agrega nada', async () => {
+    cargarDatosDeEjemplo.mockRejectedValue(new ApiError(0, null))
+    const user = await montar([])
+    await screen.findByText(/todavía no tienes ningún inmueble/i)
+
+    await cargarEjemplo(user)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no se pudo conectar con el servidor/i)
+    expect(screen.getByText(/todavía no tienes ningún inmueble/i)).toBeInTheDocument()
+  })
+
+  it('mientras carga deshabilita el botón (no se envía dos veces)', async () => {
+    let terminar
+    cargarDatosDeEjemplo.mockReturnValue(
+      new Promise((resolve) => {
+        terminar = resolve
+      })
+    )
+    const user = await montar([])
+    await screen.findByText(/todavía no tienes ningún inmueble/i)
+
+    await cargarEjemplo(user)
+
+    expect(await screen.findByRole('button', { name: 'Cargando ejemplo…' })).toBeDisabled()
+    terminar(DEMO)
+    expect(await screen.findByRole('status')).toBeInTheDocument()
+  })
+
+  it('después de eliminar el inmueble de demostración se puede volver a cargar', async () => {
+    eliminarInmueble.mockResolvedValue(null)
+    cargarDatosDeEjemplo.mockResolvedValue(DEMO)
+    const user = await montar([DEMO])
+    await screen.findByText('Demo (ejemplo)')
+
+    await user.click(screen.getByRole('button', { name: 'Eliminar Demo (ejemplo)' }))
+    await user.click(screen.getByRole('button', { name: /sí, eliminar/i }))
+    await waitFor(() => expect(screen.queryByText('Demo (ejemplo)')).not.toBeInTheDocument())
+    expect(eliminarInmueble).toHaveBeenCalledWith(7)
+
+    await cargarEjemplo(user)
+
+    expect(await screen.findByRole('heading', { name: 'Demo (ejemplo)' })).toBeInTheDocument()
   })
 })
