@@ -23,3 +23,9 @@ export function actualizarInmueble(id, { nombre, direccion }) {
 export function eliminarInmueble(id) {
   return apiFetch(`/api/inmuebles/${id}`, { method: 'DELETE' })
 }
+
+// POST /api/inmuebles/demo -> 201 con el inmueble de demostración creado, con es_demo = true y sus alertas pendientes (HU-19 / DET-27).
+// 409 { errores: { general } } si el usuario ya cargó los datos de ejemplo (RN-16): no se duplican.
+export function cargarDatosDeEjemplo() {
+  return apiFetch('/api/inmuebles/demo', { method: 'POST' })
+}
