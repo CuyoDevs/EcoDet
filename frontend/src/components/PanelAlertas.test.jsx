@@ -3,7 +3,12 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import PanelAlertas from './PanelAlertas'
-import { listarAlertasInmueble, marcarAlertaNormal, obtenerDetalleAlerta } from '../api/alertas'
+import {
+  confirmarAlerta,
+  listarAlertasInmueble,
+  marcarAlertaNormal,
+  obtenerDetalleAlerta,
+} from '../api/alertas'
 import { listarInmuebles } from '../api/inmuebles'
 import { obtenerUmbrales } from '../api/umbrales'
 import { ApiError } from '../api/client'
@@ -12,6 +17,7 @@ vi.mock('../api/alertas', () => ({
   listarAlertasInmueble: vi.fn(),
   obtenerDetalleAlerta: vi.fn(),
   marcarAlertaNormal: vi.fn(),
+  confirmarAlerta: vi.fn(),
 }))
 
 vi.mock('../api/inmuebles', () => ({
@@ -57,6 +63,7 @@ beforeEach(() => {
   listarAlertasInmueble.mockReset()
   obtenerDetalleAlerta.mockReset()
   marcarAlertaNormal.mockReset()
+  confirmarAlerta.mockReset()
   listarInmuebles.mockReset()
   obtenerUmbrales.mockReset()
   obtenerUmbrales.mockResolvedValue(UMBRALES_INICIALES)
@@ -224,6 +231,94 @@ describe('PanelAlertas · marcar como normal (HU-16 / DET-102)', () => {
       'Solo se puede marcar como normal una alerta pendiente.'
     )
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    await waitFor(() => expect(listarAlertasInmueble).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('PanelAlertas · confirmar (HU-17 / DET-25)', () => {
+  // Muestra la lista con una alerta y abre su detalle.
+  async function abrirDetalle(alerta = ALERTA_LUZ) {
+    const user = userEvent.setup()
+    listarAlertasInmueble.mockResolvedValue([alerta])
+    obtenerDetalleAlerta.mockResolvedValue(alerta)
+    render(<PanelAlertas inmuebleId={1} />)
+    await user.click(await screen.findByRole('button', { name: /2025-07-01 — 2025-07-28/i }))
+    await screen.findByText(/Consumo total del período/i)
+    return user
+  }
+
+  const CONFIRMAR = { name: 'Confirmar' }
+  const MARCAR_NORMAL = { name: 'Marcar como normal' }
+
+  it('ofrece "Confirmar" junto a "Marcar como normal" en una alerta pendiente', async () => {
+    await abrirDetalle()
+
+    expect(screen.getByRole('button', CONFIRMAR)).toBeInTheDocument()
+    expect(screen.getByRole('button', MARCAR_NORMAL)).toBeInTheDocument()
+  })
+
+  it.each(['CONFIRMADA', 'NORMAL'])('no ofrece "Confirmar" en una alerta %s', async (estado) => {
+    await abrirDetalle({ ...ALERTA_LUZ, estado })
+
+    expect(screen.queryByRole('button', CONFIRMAR)).not.toBeInTheDocument()
+  })
+
+  it('en una alerta ya confirmada explica que quedó registrada como revisada', async () => {
+    await abrirDetalle({ ...ALERTA_LUZ, estado: 'CONFIRMADA' })
+
+    expect(screen.getByText(/fue confirmada/i)).toBeInTheDocument()
+  })
+
+  it('al elegir "Confirmar" la alerta pasa a confirmada, sale de las pendientes y avisa', async () => {
+    confirmarAlerta.mockResolvedValue({ ...ALERTA_LUZ, estado: 'CONFIRMADA' })
+    const user = await abrirDetalle()
+
+    await user.click(screen.getByRole('button', CONFIRMAR))
+
+    await waitFor(() => expect(confirmarAlerta).toHaveBeenCalledWith(10))
+    expect(await screen.findByText(/sale de las pendientes/i)).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument() // confirmar no pide un diálogo
+    expect(screen.getAllByText('CONFIRMADA')).toHaveLength(2) // en la lista y en el detalle
+    expect(screen.queryByText('PENDIENTE')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', CONFIRMAR)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', MARCAR_NORMAL)).not.toBeInTheDocument()
+  })
+
+  it('con el filtro "Pendiente" la alerta confirmada sale de la lista', async () => {
+    confirmarAlerta.mockResolvedValue({ ...ALERTA_LUZ, estado: 'CONFIRMADA' })
+    const user = await abrirDetalle()
+    await user.selectOptions(screen.getByLabelText(/estado/i), 'PENDIENTE')
+
+    await user.click(await screen.findByRole('button', CONFIRMAR))
+
+    expect(
+      await screen.findByText(/no hay alertas que coincidan con los filtros seleccionados/i)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/sale de las pendientes/i)).toBeInTheDocument()
+  })
+
+  it('mientras confirma deshabilita las dos acciones', async () => {
+    let terminar
+    confirmarAlerta.mockReturnValue(new Promise((resolver) => { terminar = resolver }))
+    const user = await abrirDetalle()
+
+    await user.click(screen.getByRole('button', CONFIRMAR))
+
+    expect(await screen.findByRole('button', { name: 'Confirmando…' })).toBeDisabled()
+    expect(screen.getByRole('button', MARCAR_NORMAL)).toBeDisabled()
+    terminar({ ...ALERTA_LUZ, estado: 'CONFIRMADA' })
+    expect(await screen.findByText(/sale de las pendientes/i)).toBeInTheDocument()
+  })
+
+  it('si la alerta ya no está pendiente (409) muestra el error y vuelve a pedir la lista', async () => {
+    confirmarAlerta.mockRejectedValue(
+      new ApiError(409, { errores: { general: 'Solo se puede confirmar una alerta pendiente.' } })
+    )
+    const user = await abrirDetalle()
+
+    await user.click(screen.getByRole('button', CONFIRMAR))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Solo se puede confirmar una alerta pendiente.')
     await waitFor(() => expect(listarAlertasInmueble).toHaveBeenCalledTimes(2))
   })
 })

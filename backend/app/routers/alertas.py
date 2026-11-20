@@ -1,4 +1,5 @@
-"""Endpoints de alertas de consumo: consulta y detalle (HU-15 / DET-23, DET-96) y marcado como normal (HU-16 / DET-100)."""
+"""Endpoints de alertas de consumo: consulta y detalle (HU-15 / DET-23, DET-96), marcado como normal (HU-16 / DET-100)
+y confirmación (HU-17 / DET-25)."""
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
@@ -105,6 +106,33 @@ def obtener_detalle_alerta(
     return _serializar_alerta(alerta)
 
 
+def _decidir_alerta_pendiente(
+    db: Session,
+    alerta_id: int,
+    usuario: Usuario,
+    nuevo_estado: EstadoAlertaEnum,
+    mensaje_conflicto: str,
+):
+    """RN-13: una alerta nace Pendiente y de ahí pasa a Confirmada o a Normal; después no se vuelve a decidir.
+
+    Solo cambia el estado de esa alerta (RN-17: no se recalcula ninguna otra) y solo si es del usuario (RN-01).
+    """
+    alerta = _buscar_alerta_del_usuario(db, alerta_id, usuario)
+    if not alerta:
+        return _alerta_no_encontrada()
+
+    if alerta.estado != EstadoAlertaEnum.PENDIENTE:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"errores": {"general": mensaje_conflicto}},
+        )
+
+    alerta.estado = nuevo_estado
+    db.commit()
+    db.refresh(alerta)
+    return _serializar_alerta(alerta)
+
+
 @router.patch("/api/alertas/{alerta_id}/normal", response_model=AlertaDetalleOut)
 def marcar_alerta_normal(
     alerta_id: int,
@@ -113,22 +141,33 @@ def marcar_alerta_normal(
 ):
     """Marca como "normal" una alerta pendiente del usuario autenticado (HU-16 / DET-100, RN-13).
 
-    Solo cambia el estado de esta alerta. A partir de ahora el detector deja su lectura fuera de
-    la referencia de las evaluaciones nuevas (RN-11, ver `detector._integran_referencia`), y las
-    alertas que ya existen para otras lecturas no se recalculan (RN-17).
+    A partir de ahora el detector deja su lectura fuera de la referencia de las evaluaciones nuevas
+    (RN-11, ver `detector._integran_referencia`); las alertas ya generadas no se recalculan (RN-17).
     """
-    alerta = _buscar_alerta_del_usuario(db, alerta_id, usuario)
-    if not alerta:
-        return _alerta_no_encontrada()
+    return _decidir_alerta_pendiente(
+        db,
+        alerta_id,
+        usuario,
+        EstadoAlertaEnum.NORMAL,
+        "Solo se puede marcar como normal una alerta pendiente.",
+    )
 
-    # RN-13: la alerta nace Pendiente y de ahí pasa a Confirmada o Normal; no se vuelve a decidir.
-    if alerta.estado != EstadoAlertaEnum.PENDIENTE:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={"errores": {"general": "Solo se puede marcar como normal una alerta pendiente."}},
-        )
 
-    alerta.estado = EstadoAlertaEnum.NORMAL
-    db.commit()
-    db.refresh(alerta)
-    return _serializar_alerta(alerta)
+@router.patch("/api/alertas/{alerta_id}/confirmar", response_model=AlertaDetalleOut)
+def confirmar_alerta(
+    alerta_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    """Confirma una alerta pendiente del usuario autenticado: sí era un consumo anormal (HU-17 / DET-25, RN-13).
+
+    Confirmar no cambia el cálculo del detector: solo las lecturas marcadas "normal" salen de la referencia,
+    así que una lectura confirmada sigue integrándola en las detecciones siguientes.
+    """
+    return _decidir_alerta_pendiente(
+        db,
+        alerta_id,
+        usuario,
+        EstadoAlertaEnum.CONFIRMADA,
+        "Solo se puede confirmar una alerta pendiente.",
+    )

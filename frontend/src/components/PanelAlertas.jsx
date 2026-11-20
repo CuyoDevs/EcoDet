@@ -1,9 +1,10 @@
-// PanelAlertas.jsx — HU-15 / DET-23, DET-97 · HU-16 / DET-102
+// PanelAlertas.jsx — HU-15 / DET-23, DET-97 · HU-16 / DET-102 · HU-17 / DET-25
 // Vista W5: lista las alertas de un inmueble con filtros por servicio y estado,
 // estado vacío ("consumo dentro de lo normal") y detalle con gráfico del período.
-// Una alerta pendiente se puede marcar como "normal" previa confirmación (RN-11, RN-13, RN-17).
+// Una alerta pendiente se puede marcar como "normal" previa confirmación (RN-11, RN-13, RN-17)
+// o confirmar directamente: queda registrada como revisada y no cambia el cálculo del detector (RN-13).
 import React, { useEffect, useState } from 'react'
-import { AlertTriangle, ArrowLeft, CheckCircle2, TrendingDown, TrendingUp } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, CheckCircle2, TrendingDown, TrendingUp } from 'lucide-react'
 import {
   BarElement,
   CategoryScale,
@@ -14,7 +15,7 @@ import {
   Tooltip,
 } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
-import { listarAlertasInmueble, marcarAlertaNormal, obtenerDetalleAlerta } from '../api/alertas'
+import { confirmarAlerta, listarAlertasInmueble, marcarAlertaNormal, obtenerDetalleAlerta } from '../api/alertas'
 import { listarInmuebles } from '../api/inmuebles'
 import { irA } from '../routes/hashRouter'
 import MarcarAlertaNormalModal from './MarcarAlertaNormalModal'
@@ -105,6 +106,7 @@ export default function PanelAlertas({ inmuebleId }) {
   const [alertaParaNormal, setAlertaParaNormal] = useState(null)
   const [marcandoNormal, setMarcandoNormal] = useState(false)
   const [errorNormal, setErrorNormal] = useState('')
+  const [confirmando, setConfirmando] = useState(false) // HU-17: confirmar la alerta seleccionada
   const [aviso, setAviso] = useState('')
   const [recarga, setRecarga] = useState(0) // se incrementa para volver a pedir la lista
 
@@ -165,6 +167,22 @@ export default function PanelAlertas({ inmuebleId }) {
     }
   }
 
+  // Refleja en la lista y en el detalle una alerta recién decidida (marcada como normal o confirmada).
+  const aplicarAlertaActualizada = (actualizada, mensaje) => {
+    // Con un filtro de estado activo (por ejemplo "Pendiente") la alerta ya no coincide y sale de la lista.
+    const sigueEnLaLista = !filtroEstado || filtroEstado === actualizada.estado
+    setAlertas((actuales) =>
+      sigueEnLaLista
+        ? actuales.map((a) => (a.id === actualizada.id ? actualizada : a))
+        : actuales.filter((a) => a.id !== actualizada.id)
+    )
+    setAlertaSeleccionada((actual) => {
+      if (!actual || actual.id !== actualizada.id) return actual
+      return sigueEnLaLista ? actualizada : null
+    })
+    setAviso(mensaje)
+  }
+
   const abrirMarcarNormal = (alerta) => {
     setErrorNormal('')
     setAlertaParaNormal(alerta)
@@ -183,18 +201,7 @@ export default function PanelAlertas({ inmuebleId }) {
     setErrorNormal('')
     try {
       const actualizada = await marcarAlertaNormal(alertaParaNormal.id)
-      // Con un filtro de estado activo (por ejemplo "Pendiente") la alerta ya no coincide y sale de la lista.
-      const sigueEnLaLista = !filtroEstado || filtroEstado === actualizada.estado
-      setAlertas((actuales) =>
-        sigueEnLaLista
-          ? actuales.map((a) => (a.id === actualizada.id ? actualizada : a))
-          : actuales.filter((a) => a.id !== actualizada.id)
-      )
-      setAlertaSeleccionada((actual) => {
-        if (!actual || actual.id !== actualizada.id) return actual
-        return sigueEnLaLista ? actualizada : null
-      })
-      setAviso('Marcada como normal: esta lectura se excluirá de los próximos cálculos.')
+      aplicarAlertaActualizada(actualizada, 'Marcada como normal: esta lectura se excluirá de los próximos cálculos.')
       setAlertaParaNormal(null)
     } catch (err) {
       setErrorNormal(err.errores?.general || err.message || 'No se pudo marcar la alerta como normal.')
@@ -202,6 +209,25 @@ export default function PanelAlertas({ inmuebleId }) {
       if (err.status === 404 || err.status === 409) setRecarga((n) => n + 1)
     } finally {
       setMarcandoNormal(false)
+    }
+  }
+
+  // HU-17 / DET-25: confirma la alerta seleccionada. No lleva diálogo: solo cambia su estado y no toca
+  // nada más (RN-17); confirmar tampoco cambia el cálculo del detector.
+  const confirmarAlertaSeleccionada = async () => {
+    if (!alertaSeleccionada || confirmando) return
+    setConfirmando(true)
+    setAviso('')
+    setErrorDetalle('')
+    try {
+      const actualizada = await confirmarAlerta(alertaSeleccionada.id)
+      aplicarAlertaActualizada(actualizada, 'Alerta confirmada: quedó registrada como revisada y sale de las pendientes.')
+    } catch (err) {
+      setErrorDetalle(err.errores?.general || err.message || 'No se pudo confirmar la alerta.')
+      // 404 / 409: la alerta cambió o ya no existe; se vuelve a pedir la lista para mostrar su estado real.
+      if (err.status === 404 || err.status === 409) setRecarga((n) => n + 1)
+    } finally {
+      setConfirmando(false)
     }
   }
 
@@ -470,18 +496,37 @@ export default function PanelAlertas({ inmuebleId }) {
                   {alertaSeleccionada.estado === 'PENDIENTE' && (
                     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
                       <p className="max-w-xs text-xs text-slate-500">
-                        Si este consumo tenía una explicación, marcarlo como normal evita que cuente en las próximas
-                        detecciones.
+                        Confirmar registra la alerta como revisada; marcarla como normal excluye la lectura de futuros
+                        cálculos.
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => abrirMarcarNormal(alertaSeleccionada)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                      >
-                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                        Marcar como normal
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={confirmarAlertaSeleccionada}
+                          disabled={confirmando || marcandoNormal}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                        >
+                          <Check className="h-4 w-4" aria-hidden="true" />
+                          {confirmando ? 'Confirmando…' : 'Confirmar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => abrirMarcarNormal(alertaSeleccionada)}
+                          disabled={confirmando || marcandoNormal}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                        >
+                          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                          Marcar como normal
+                        </button>
+                      </div>
                     </div>
+                  )}
+
+                  {alertaSeleccionada.estado === 'CONFIRMADA' && (
+                    <p className="flex items-start gap-2 border-t border-slate-100 pt-4 text-sm text-emerald-700">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                      Esta alerta fue confirmada como revisada.
+                    </p>
                   )}
 
                   {alertaSeleccionada.estado === 'NORMAL' && (
@@ -502,8 +547,6 @@ export default function PanelAlertas({ inmuebleId }) {
             </section>
           </div>
         )}
-      </main>
-
 
         {/* HU-18 / DET-26: sensibilidad del detector; fuera del ternario para verse también sin alertas */}
         <PanelUmbrales inmuebleId={inmuebleId} />
