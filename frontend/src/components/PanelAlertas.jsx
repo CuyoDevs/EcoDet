@@ -502,9 +502,7 @@ export default function PanelAlertas({ inmuebleId }) {
             </section>
           </div>
         )}
-      </main>
-
-
+    
         {/* HU-18 / DET-26: sensibilidad del detector; fuera del ternario para verse también sin alertas */}
         <PanelUmbrales inmuebleId={inmuebleId} />
       </main>
