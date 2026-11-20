@@ -282,11 +282,19 @@ class EstadisticasServicio(BaseModel):
     tendencia: str
 
 
+class FranjaHabitualOut(BaseModel):
+    promedio: float
+    umbral: float
+    limite_inferior: float
+    limite_superior: float
+
+
 class HistorialServicioOut(BaseModel):
     detector_activo: bool
     lecturas_faltantes: int = 0
     lecturas: list[LecturaHistorialOut]
     estadisticas: EstadisticasServicio | None
+    franja_habitual: FranjaHabitualOut | None = None
 
 
 class HistorialInmuebleOut(BaseModel):

@@ -12,7 +12,7 @@ const UNIDADES = { LUZ: 'kWh', GAS: 'm³', AGUA: 'm³' }
 const COLORES = { LUZ: '#f59e0b', GAS: '#3b82f6', AGUA: '#06b6d4' }
 
 // ─── Mini gráfico SVG de línea ────────────────────────────────────────────────
-function GraficoLinea({ lecturas, color, onSeleccionar, seleccionada }) {
+function GraficoLinea({ lecturas, franja, color, onSeleccionar, seleccionada }) {
   if (!lecturas || lecturas.length === 0) return null
 
   const W = 320
@@ -20,7 +20,10 @@ function GraficoLinea({ lecturas, color, onSeleccionar, seleccionada }) {
   const PADDING = 20
 
   const valores = lecturas.map((l) => l.consumo_por_dia)
-  const minV = Math.min(...valores)
+  if (franja) {
+    valores.push(franja.limite_inferior, franja.limite_superior, franja.promedio)
+  }
+  const minV = Math.min(0, ...valores)
   const maxV = Math.max(...valores)
   const rango = maxV - minV || 1
 
@@ -29,6 +32,9 @@ function GraficoLinea({ lecturas, color, onSeleccionar, seleccionada }) {
 
   const puntos = lecturas.map((l, i) => ({ x: toX(i), y: toY(l.consumo_por_dia), lectura: l }))
   const polyline = puntos.map((p) => `${p.x},${p.y}`).join(' ')
+  const yFranjaSuperior = toY(franja?.limite_superior ?? 0)
+  const yFranjaInferior = toY(Math.max(0, franja?.limite_inferior ?? 0))
+  const yPromedio = toY(franja?.promedio ?? 0)
 
   return (
     <svg
@@ -37,6 +43,29 @@ function GraficoLinea({ lecturas, color, onSeleccionar, seleccionada }) {
       aria-label="Gráfico de consumo por día"
       className="w-full max-w-xs"
     >
+      {franja && (
+        <>
+          <rect
+            x={PADDING}
+            y={yFranjaSuperior}
+            width={W - PADDING * 2}
+            height={Math.max(0, yFranjaInferior - yFranjaSuperior)}
+            fill="#14b8a6"
+            fillOpacity="0.18"
+            data-testid={`franja-habitual-${franja.promedio}`}
+          />
+          <line
+            x1={PADDING}
+            x2={W - PADDING}
+            y1={yPromedio}
+            y2={yPromedio}
+            stroke="#0d9488"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+            opacity="0.8"
+          />
+        </>
+      )}
       <polyline
         points={polyline}
         fill="none"
@@ -97,6 +126,7 @@ function TooltipLectura({ lectura, unidad, onCerrar }) {
 function PanelServicio({ servicio, datos, onAbrirCarga, onEditar, onEliminar }) {
   // Se guarda el id (no el objeto) para que el detalle no muestre datos viejos tras editar o eliminar.
   const [seleccionadaId, setSeleccionadaId] = useState(null)
+  const [mostrarFranja, setMostrarFranja] = useState(true)
   const seleccionada = datos.lecturas.find((l) => l.id === seleccionadaId) ?? null
   const unidad = UNIDADES[servicio]
   const color = COLORES[servicio]
@@ -145,9 +175,28 @@ function PanelServicio({ servicio, datos, onAbrirCarga, onEditar, onEliminar }) 
         <ProgresoAprendizaje registradas={lecturas.length} faltantes={datos.lecturas_faltantes} />
       )}
 
+      {detector_activo && datos.franja_habitual && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-teal-50 px-3 py-2 text-xs text-teal-800">
+          <label className="inline-flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={mostrarFranja}
+              onChange={(event) => setMostrarFranja(event.target.checked)}
+            />
+            Mostrar franja habitual
+          </label>
+          {mostrarFranja && (
+            <span>
+              {datos.franja_habitual.limite_inferior}–{datos.franja_habitual.limite_superior} {unidad}/día
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Gráfico */}
       <GraficoLinea
         lecturas={lecturas}
+        franja={detector_activo && mostrarFranja ? datos.franja_habitual : null}
         color={color}
         onSeleccionar={(l) => setSeleccionadaId(l.id)}
         seleccionada={seleccionada}

@@ -15,6 +15,7 @@ const historialConDatos = {
       { id: 2, servicio: 'LUZ', fecha_inicio: '2026-02-01', fecha_fin: '2026-02-28', consumo: 200, consumo_por_dia: 7.14, tiene_alerta: true },
     ],
     estadisticas: { promedio: 5.5, minimo: 3.87, maximo: 7.14, tendencia: 'sube' },
+    franja_habitual: { promedio: 5.5, umbral: 2, limite_inferior: 3.1, limite_superior: 7.9 },
   },
   GAS: {
     detector_activo: false,
@@ -63,6 +64,27 @@ describe('HistorialConsumos', () => {
     await waitFor(() => {
       expect(screen.getByText(/Detector activo/)).toBeInTheDocument()
     })
+  })
+
+  it('muestra y puede ocultar la franja habitual del servicio activo', async () => {
+    vi.spyOn(consumosApi, 'obtenerHistorial').mockResolvedValue(historialConDatos)
+    render(<HistorialConsumos inmuebleId={1} />)
+
+    const control = await screen.findByRole('checkbox', { name: 'Mostrar franja habitual' })
+    expect(control).toBeChecked()
+    expect(screen.getByText(/3.1–7.9 kWh\/día/)).toBeInTheDocument()
+    expect(screen.getByTestId('franja-habitual-5.5')).toBeInTheDocument()
+
+    fireEvent.click(control)
+    expect(control).not.toBeChecked()
+    expect(screen.queryByTestId('franja-habitual-5.5')).not.toBeInTheDocument()
+  })
+
+  it('no muestra el control de franja cuando el detector está inactivo', async () => {
+    vi.spyOn(consumosApi, 'obtenerHistorial').mockResolvedValue(historialVacio)
+    render(<HistorialConsumos inmuebleId={2} />)
+    await screen.findAllByText('Sin lecturas registradas.')
+    expect(screen.queryByRole('checkbox', { name: 'Mostrar franja habitual' })).not.toBeInTheDocument()
   })
 
   it('muestra "Sin lecturas registradas" cuando el servicio no tiene datos', async () => {
