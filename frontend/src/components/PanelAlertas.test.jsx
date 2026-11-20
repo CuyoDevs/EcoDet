@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import PanelAlertas from './PanelAlertas'
 import { listarAlertasInmueble, marcarAlertaNormal, obtenerDetalleAlerta } from '../api/alertas'
 import { listarInmuebles } from '../api/inmuebles'
+import { obtenerUmbrales } from '../api/umbrales'
 import { ApiError } from '../api/client'
 
 vi.mock('../api/alertas', () => ({
@@ -15,6 +16,11 @@ vi.mock('../api/alertas', () => ({
 
 vi.mock('../api/inmuebles', () => ({
   listarInmuebles: vi.fn(),
+}))
+
+vi.mock('../api/umbrales', () => ({
+  obtenerUmbrales: vi.fn(),
+  guardarUmbral: vi.fn(),
 }))
 
 vi.mock('react-chartjs-2', () => ({
@@ -41,11 +47,19 @@ const ALERTA_LUZ = {
   fecha_creacion: '2025-07-29T10:00:00',
 }
 
+const UMBRALES_INICIALES = [
+  { servicio: 'LUZ', desvios: 2, personalizado: false },
+  { servicio: 'GAS', desvios: 2, personalizado: false },
+  { servicio: 'AGUA', desvios: 2, personalizado: false },
+]
+
 beforeEach(() => {
   listarAlertasInmueble.mockReset()
   obtenerDetalleAlerta.mockReset()
   marcarAlertaNormal.mockReset()
   listarInmuebles.mockReset()
+  obtenerUmbrales.mockReset()
+  obtenerUmbrales.mockResolvedValue(UMBRALES_INICIALES)
   listarInmuebles.mockResolvedValue([{ id: 1, nombre: 'Casa Norte', direccion: 'Ruta 40', alertas_pendientes: 1 }])
 })
 
@@ -56,6 +70,14 @@ describe('PanelAlertas · listado, filtros y detalle (HU-15)', () => {
 
     expect(await screen.findByText(/el consumo está dentro de lo normal/i)).toBeInTheDocument()
     expect(await screen.findByText(/Casa Norte/)).toBeInTheDocument()
+  })
+
+  it('muestra el ajuste de sensibilidad aunque el inmueble no tenga alertas (HU-18)', async () => {
+    listarAlertasInmueble.mockResolvedValue([])
+    render(<PanelAlertas inmuebleId={1} />)
+
+    expect(await screen.findByText(/el consumo está dentro de lo normal/i)).toBeInTheDocument()
+    expect(await screen.findByLabelText('Umbral de Luz (desvíos)')).toHaveValue('2,0')
   })
 
   it('lista las alertas del inmueble y al seleccionar una muestra el detalle y el gráfico', async () => {

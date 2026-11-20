@@ -371,3 +371,45 @@ def test_historial_detector_activo_con_6_lecturas(client):
     res = client.get(f"/api/consumos/{inmueble_id}/historial", headers=headers)
     assert res.status_code == 200
     assert res.json()["GAS"]["detector_activo"] is True
+
+
+def test_historial_franja_habitual_solo_activa_con_6_lecturas(client):
+    """La franja promedio ± umbral se expone solo después de alcanzar el mínimo."""
+    headers = _crear_usuario_y_obtener_headers(client, "historial_franja@test.com")
+    inm = _crear_inmueble(client, headers, "Casa Franja Habitual")
+    inmueble_id = inm["id"]
+
+    for i in range(5):
+        inicio = date(2026, 1, 1) + timedelta(days=i * 2)
+        fin = inicio + timedelta(days=1)
+        r = client.post("/api/consumos", json={
+            "inmueble_id": inmueble_id,
+            "servicio": "AGUA",
+            "fecha_inicio": str(inicio),
+            "fecha_fin": str(fin),
+            "consumo": 10 + i,
+        }, headers=headers)
+        assert r.status_code == 201
+
+    antes = client.get(f"/api/consumos/{inmueble_id}/historial", headers=headers).json()["AGUA"]
+    assert antes["detector_activo"] is False
+    assert antes["franja_habitual"] is None
+
+    ultimo = client.post("/api/consumos", json={
+        "inmueble_id": inmueble_id,
+        "servicio": "AGUA",
+        "fecha_inicio": "2026-02-01",
+        "fecha_fin": "2026-02-28",
+        "consumo": 15,
+    }, headers=headers)
+    assert ultimo.status_code == 201
+
+    despues = client.get(f"/api/consumos/{inmueble_id}/historial", headers=headers).json()["AGUA"]
+    assert despues["detector_activo"] is True
+    assert despues["franja_habitual"] is not None
+    assert set(despues["franja_habitual"]) == {
+        "promedio",
+        "umbral",
+        "limite_inferior",
+        "limite_superior",
+    }

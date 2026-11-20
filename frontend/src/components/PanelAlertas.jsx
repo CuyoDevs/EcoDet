@@ -18,6 +18,7 @@ import { listarAlertasInmueble, marcarAlertaNormal, obtenerDetalleAlerta } from 
 import { listarInmuebles } from '../api/inmuebles'
 import { irA } from '../routes/hashRouter'
 import MarcarAlertaNormalModal from './MarcarAlertaNormalModal'
+import PanelUmbrales from './PanelUmbrales'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
@@ -501,6 +502,11 @@ export default function PanelAlertas({ inmuebleId }) {
             </section>
           </div>
         )}
+      </main>
+
+
+        {/* HU-18 / DET-26: sensibilidad del detector; fuera del ternario para verse también sin alertas */}
+        <PanelUmbrales inmuebleId={inmuebleId} />
       </main>
 
       {alertaParaNormal && (
