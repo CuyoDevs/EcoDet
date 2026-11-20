@@ -1,5 +1,6 @@
 """Esquemas Pydantic V2 de la API (DET-30)."""
 from datetime import date, datetime
+import math
 import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -302,3 +303,29 @@ class HistorialInmuebleOut(BaseModel):
     LUZ: HistorialServicioOut
     GAS: HistorialServicioOut
     AGUA: HistorialServicioOut
+
+
+class UmbralIn(BaseModel):
+    """Cuerpo del PUT de umbral (HU-18): un número finito mayor que cero."""
+
+    desvios: float
+
+    @field_validator("desvios", mode="before")
+    @classmethod
+    def _desvios(cls, v):
+        mensaje = "El umbral debe ser un número mayor que cero."
+        if isinstance(v, bool):
+            raise ValueError(mensaje)
+        try:
+            numero = float(v)
+        except (TypeError, ValueError):
+            raise ValueError(mensaje) from None
+        if not math.isfinite(numero) or numero <= 0:
+            raise ValueError(mensaje)
+        return numero
+
+
+class UmbralOut(BaseModel):
+    servicio: ServicioEnum
+    desvios: float
+    personalizado: bool
