@@ -45,6 +45,7 @@ def listar_inmuebles(
             usuario_id=inmueble.usuario_id,
             nombre=inmueble.nombre,
             direccion=inmueble.direccion,
+            es_demo=inmueble.es_demo,
             alertas_pendientes=conteos_por_inmueble.get(inmueble.id, 0),
         )
         for inmueble in inmuebles

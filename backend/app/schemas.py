@@ -108,6 +108,7 @@ class InmuebleOut(BaseModel):
     usuario_id: int
     nombre: str
     direccion: str | None = None
+    es_demo: bool = False
     alertas_pendientes: int = 0
 
 
