@@ -21,3 +21,9 @@ export function obtenerDetalleAlerta(alertaId) {
 export function marcarAlertaNormal(alertaId) {
   return apiFetch(`/api/alertas/${alertaId}/normal`, { method: 'PATCH' })
 }
+
+// PATCH /api/alertas/{alertaId}/confirmar -> la alerta ya con estado CONFIRMADA, con el mismo formato que el detalle (HU-17 / DET-25, RN-13).
+// 404 { errores: { general } } si no existe o es de otro usuario (RN-01); 409 si la alerta ya no está pendiente.
+export function confirmarAlerta(alertaId) {
+  return apiFetch(`/api/alertas/${alertaId}/confirmar`, { method: 'PATCH' })
+}
