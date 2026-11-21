@@ -75,7 +75,6 @@ def poblar_base_de_datos():
             usuario_id=usuario.id,
             nombre="Casa Principal",
             direccion="Av. San Martín 450, Ciudad",
-            es_demo=True
         )
         db.add(casa)
         db.commit()
@@ -163,7 +162,6 @@ def poblar_base_de_datos():
             usuario_id=usuario.id,
             nombre="Departamento Centro",
             direccion="Belgrano 120, Piso 4 B",
-            es_demo=True
         )
         db.add(depto)
         db.commit()
@@ -196,7 +194,6 @@ def poblar_base_de_datos():
             usuario_id=usuario.id,
             nombre="Cabaña de Verano",
             direccion="Ruta Panamericana km 24",
-            es_demo=True
         )
         db.add(cabana)
         db.commit()

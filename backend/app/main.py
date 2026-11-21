@@ -11,6 +11,7 @@ from .routers import inmuebles
 from .routers import consumos
 from .routers import alertas
 from .routers import umbrales
+from .routers import demo
 
 # Crear tablas en SQLite automáticamente al iniciar
 Base.metadata.create_all(bind=engine)
@@ -38,6 +39,7 @@ app.include_router(inmuebles.router)
 app.include_router(consumos.router)
 app.include_router(alertas.router)
 app.include_router(umbrales.router)
+app.include_router(demo.router)
 
 _MENSAJES_422 = {
     "missing": "Este campo es obligatorio.",
