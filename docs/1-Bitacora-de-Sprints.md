@@ -17,9 +17,7 @@
 
 ---
 
-# ============================================================
-# SPRINT 1 · Cimientos Técnicos, Cuentas, Inmuebles e Historial
-# ============================================================
+# Sprint 1 · Cimientos Técnicos, Cuentas, Inmuebles e Historial
 
 ## 1. Encabezado del Sprint
 - **Equipo:** CuyoDevs
@@ -88,11 +86,8 @@
   2. Automatizar tests unitarios obligatorios en cada PR.
 
 ---
----
 
-# ============================================================
-# SPRINT 2 · Motor Estadístico, Alertas y Sensibilidad
-# ============================================================
+# Sprint 2 · Motor Estadístico, Alertas y Sensibilidad
 
 ## 1. Encabezado del Sprint
 - **Equipo:** CuyoDevs
@@ -110,7 +105,7 @@
   - **DET-19 (HU-11):** Editar y eliminar lecturas y reevaluar alertas — 3 pts
   - **DET-20 (HU-12):** Motor estadístico del detector (estacionalidad y umbrales) — 5 pts
   - **DET-21 (HU-13):** Recibir alerta de consumo alto o bajo persistida — 5 pts
-  - **DET-22 (HU-14):** Estado 'aprendiendo' del detector ($< 6$ lecturas) — 2 pts
+  - **DET-22 (HU-14):** Estado 'aprendiendo' del detector (menos de 6 lecturas) — 2 pts
   - **DET-23 (HU-15):** Panel central de alertas con filtros — 5 pts
   - **DET-24 (HU-16):** Marcar una alerta como "normal" (exclusión estadística) — 3 pts
   - **DET-25 (HU-17):** Confirmar una alerta — 2 pts
