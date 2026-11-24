@@ -1,0 +1,291 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1240" width="1120" height="1240" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <!-- Flecha de dependencia (punteada abierta) -->
+    <marker id="dep-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 1 2 L 10 6 L 1 10" fill="none" stroke="#475569" stroke-width="1.5"/>
+    </marker>
+    <!-- Rombo de composición relleno (en el origen) -->
+    <marker id="comp-diamond" viewBox="0 0 16 12" refX="2" refY="6" markerWidth="12" markerHeight="9" orient="auto">
+      <path d="M 1 6 L 7 1 L 13 6 L 7 11 z" fill="#334155" stroke="#334155" stroke-width="1"/>
+    </marker>
+  </defs>
+
+  <rect width="1120" height="1240" fill="#ffffff"/>
+
+  <!-- ================= USUARIO ================= -->
+  <g transform="translate(150, 20)">
+    <rect width="290" height="175" rx="4" fill="#fdf2f8" stroke="#db2777" stroke-width="1.5"/>
+    <text x="145" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="#831843">Usuario</text>
+    <line x1="0" y1="34" x2="290" y2="34" stroke="#db2777" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="54">+int id</text>
+      <text x="12" y="72">+string nombre</text>
+      <text x="12" y="90">+string correo</text>
+      <text x="12" y="108">+string contrasena_hash</text>
+      <text x="12" y="126">+datetime fecha_creacion</text>
+      <text x="12" y="144">+inmuebles: List&lt;Inmueble&gt;</text>
+    </g>
+    <line x1="0" y1="154" x2="290" y2="154" stroke="#f9a8d4" stroke-width="1"/>
+    <text x="12" y="168" font-size="10.5" fill="#64748b">Tabla: usuarios (ORM SQLAlchemy)</text>
+  </g>
+
+  <!-- ================= INMUEBLE ================= -->
+  <g transform="translate(150, 250)">
+    <rect width="290" height="210" rx="4" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+    <text x="145" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="#134e4a">Inmueble</text>
+    <line x1="0" y1="34" x2="290" y2="34" stroke="#0d9488" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="54">+int id</text>
+      <text x="12" y="72">+int usuario_id</text>
+      <text x="12" y="90">+string nombre</text>
+      <text x="12" y="108">+string direccion</text>
+      <text x="12" y="126">+bool es_demo</text>
+      <text x="12" y="144">+datetime fecha_creacion</text>
+      <text x="12" y="162">+lecturas: List&lt;Lectura&gt;</text>
+      <text x="12" y="180">+umbrales: List&lt;UmbralServicio&gt;</text>
+    </g>
+    <line x1="0" y1="190" x2="290" y2="190" stroke="#99f6e4" stroke-width="1"/>
+    <text x="12" y="204" font-size="10.5" fill="#64748b">Tabla: inmuebles · UQ(usuario_id, nombre)</text>
+  </g>
+
+  <!-- ================= LECTURA ================= -->
+  <g transform="translate(150, 520)">
+    <rect width="290" height="245" rx="4" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+    <text x="145" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="#7c2d12">Lectura</text>
+    <line x1="0" y1="34" x2="290" y2="34" stroke="#ea580c" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="54">+int id</text>
+      <text x="12" y="72">+int inmueble_id</text>
+      <text x="12" y="90">+ServicioEnum servicio</text>
+      <text x="12" y="108">+date fecha_inicio</text>
+      <text x="12" y="126">+date fecha_fin</text>
+      <text x="12" y="144">+float consumo</text>
+      <text x="12" y="162">+datetime fecha_creacion</text>
+      <text x="12" y="180">+alerta: Alerta</text>
+    </g>
+    <line x1="0" y1="192" x2="290" y2="192" stroke="#fed7aa" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="212">+dias_del_periodo() int</text>
+      <text x="12" y="230">+consumo_por_dia() float</text>
+    </g>
+  </g>
+
+  <!-- ================= ALERTA ================= -->
+  <g transform="translate(40, 845)">
+    <rect width="285" height="205" rx="4" fill="#f0f9ff" stroke="#0284c7" stroke-width="1.5"/>
+    <text x="142" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="#0c4a6e">Alerta</text>
+    <line x1="0" y1="34" x2="285" y2="34" stroke="#0284c7" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="54">+int id</text>
+      <text x="12" y="72">+int lectura_id</text>
+      <text x="12" y="90">+TipoAlertaEnum tipo</text>
+      <text x="12" y="108">+EstadoAlertaEnum estado</text>
+      <text x="12" y="126">+float desvio_porcentual</text>
+      <text x="12" y="144">+float consumo_por_dia</text>
+      <text x="12" y="162">+float consumo_habitual_por_dia</text>
+      <text x="12" y="180">+datetime fecha_creacion</text>
+    </g>
+    <line x1="0" y1="188" x2="285" y2="188" stroke="#bae6fd" stroke-width="1"/>
+    <text x="12" y="200" font-size="10.5" fill="#64748b">Tabla: alertas (1 a 0..1 con Lectura)</text>
+  </g>
+
+  <!-- ================= UMBRALSERVICIO ================= -->
+  <g transform="translate(560, 540)">
+    <rect width="285" height="145" rx="4" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+    <text x="142" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="#14532d">UmbralServicio</text>
+    <line x1="0" y1="34" x2="285" y2="34" stroke="#16a34a" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="56">+int id</text>
+      <text x="12" y="74">+int inmueble_id</text>
+      <text x="12" y="92">+ServicioEnum servicio</text>
+      <text x="12" y="110">+float desvios</text>
+    </g>
+    <line x1="0" y1="122" x2="285" y2="122" stroke="#bbf7d0" stroke-width="1"/>
+    <text x="12" y="137" font-size="10.5" fill="#64748b">Tabla: umbrales_servicio · desvios &gt; 0</text>
+  </g>
+
+  <!-- ================= DETECTOR ANOMALIAS ================= -->
+  <g transform="translate(560, 220)">
+    <rect width="485" height="245" rx="4" fill="#f7fee7" stroke="#65a30d" stroke-width="1.5"/>
+    <text x="242" y="20" text-anchor="middle" font-size="10.5" fill="#4d7c0f">«module»</text>
+    <text x="242" y="38" text-anchor="middle" font-size="13.5" font-weight="700" fill="#365314">DetectorAnomalias</text>
+    <line x1="0" y1="48" x2="485" y2="48" stroke="#65a30d" stroke-width="1"/>
+    <text x="12" y="66" font-size="11.5" fill="#1e293b">+int MINIMO_REFERENCIA = 3</text>
+    <line x1="0" y1="76" x2="485" y2="76" stroke="#d9f99d" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="96">+consumo_por_dia(consumo, fecha_inicio, fecha_fin) float</text>
+      <text x="12" y="114">+estacion_de(fecha) string</text>
+      <text x="12" y="132">+punto_medio(fecha_inicio, fecha_fin) date</text>
+      <text x="12" y="150">+umbral_vigente(db, inmueble_id, servicio) float</text>
+      <text x="12" y="168">+seleccionar_referencia(lecturas, evaluada) Tuple</text>
+      <text x="12" y="186">+calcular_limites(consumos_por_dia, umbral) Tuple</text>
+      <text x="12" y="204">+clasificar(consumo, limite_inferior, limite_superior) EstadoEvaluacion</text>
+      <text x="12" y="222">+lecturas_faltantes_para_activar(total) int</text>
+      <text x="12" y="238">+evaluar_lectura(db, lectura) ResultadoEvaluacion</text>
+    </g>
+  </g>
+
+  <!-- ================= DETECTOR CONFIG ================= -->
+  <g transform="translate(560, 40)">
+    <rect width="380" height="120" rx="4" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5"/>
+    <text x="190" y="20" text-anchor="middle" font-size="10.5" fill="#a16207">«config.json»</text>
+    <text x="190" y="38" text-anchor="middle" font-size="13.5" font-weight="700" fill="#713f12">DetectorConfig</text>
+    <line x1="0" y1="48" x2="380" y2="48" stroke="#ca8a04" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="68">+int minimo_de_lecturas = 6</text>
+      <text x="12" y="86">+float umbral_inicial_en_desvios = 2.0</text>
+      <text x="12" y="104">+float piso_del_desvio_porcentaje_del_promedio = 10.0</text>
+    </g>
+  </g>
+
+  <!-- ================= RESULTADO EVALUACION ================= -->
+  <g transform="translate(650, 815)">
+    <rect width="340" height="275" rx="4" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="170" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1e3a8a">ResultadoEvaluacion</text>
+    <line x1="0" y1="34" x2="340" y2="34" stroke="#2563eb" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="12" y="54">+EstadoEvaluacion estado</text>
+      <text x="12" y="72">+float consumo_por_dia</text>
+      <text x="12" y="90">+float umbral</text>
+      <text x="12" y="108">+float promedio</text>
+      <text x="12" y="126">+float desvio_efectivo</text>
+      <text x="12" y="144">+float limite_inferior</text>
+      <text x="12" y="162">+float limite_superior</text>
+      <text x="12" y="180">+int cantidad_referencia</text>
+      <text x="12" y="198">+bool referencia_estacional</text>
+      <text x="12" y="216">+string motivo</text>
+      <text x="12" y="234">+int lecturas_registradas</text>
+      <text x="12" y="252">+int lecturas_faltantes</text>
+    </g>
+  </g>
+
+  <!-- ================= ENUMERACIONES ================= -->
+  <!-- ServicioEnum -->
+  <g transform="translate(415, 775)">
+    <rect width="150" height="105" rx="4" fill="#f8fafc" stroke="#64748b" stroke-width="1.4"/>
+    <text x="75" y="18" text-anchor="middle" font-size="10.5" fill="#475569">«enumeration»</text>
+    <text x="75" y="34" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f172a">ServicioEnum</text>
+    <line x1="0" y1="42" x2="150" y2="42" stroke="#64748b" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="14" y="60">LUZ</text>
+      <text x="14" y="78">GAS</text>
+      <text x="14" y="96">AGUA</text>
+    </g>
+  </g>
+
+  <!-- TipoAlertaEnum -->
+  <g transform="translate(40, 1110)">
+    <rect width="145" height="90" rx="4" fill="#fef2f2" stroke="#dc2626" stroke-width="1.4"/>
+    <text x="72" y="18" text-anchor="middle" font-size="10.5" fill="#991b1b">«enumeration»</text>
+    <text x="72" y="34" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7f1d1d">TipoAlertaEnum</text>
+    <line x1="0" y1="42" x2="145" y2="42" stroke="#dc2626" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="14" y="60">ALTA</text>
+      <text x="14" y="78">BAJA</text>
+    </g>
+  </g>
+
+  <!-- EstadoAlertaEnum -->
+  <g transform="translate(215, 1110)">
+    <rect width="155" height="108" rx="4" fill="#fefce8" stroke="#eab308" stroke-width="1.4"/>
+    <text x="77" y="18" text-anchor="middle" font-size="10.5" fill="#854d0e">«enumeration»</text>
+    <text x="77" y="34" text-anchor="middle" font-size="12.5" font-weight="700" fill="#713f12">EstadoAlertaEnum</text>
+    <line x1="0" y1="42" x2="155" y2="42" stroke="#eab308" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="14" y="60">PENDIENTE</text>
+      <text x="14" y="78">CONFIRMADA</text>
+      <text x="14" y="96">NORMAL</text>
+    </g>
+  </g>
+
+  <!-- EstadoEvaluacion -->
+  <g transform="translate(740, 1110)">
+    <rect width="160" height="122" rx="4" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.4"/>
+    <text x="80" y="18" text-anchor="middle" font-size="10.5" fill="#166534">«enumeration»</text>
+    <text x="80" y="34" text-anchor="middle" font-size="12.5" font-weight="700" fill="#14532d">EstadoEvaluacion</text>
+    <line x1="0" y1="42" x2="160" y2="42" stroke="#16a34a" stroke-width="1"/>
+    <g font-size="11.5" fill="#1e293b">
+      <text x="14" y="60">APRENDIENDO</text>
+      <text x="14" y="78">DENTRO</text>
+      <text x="14" y="96">ALTA</text>
+      <text x="14" y="114">BAJA</text>
+    </g>
+  </g>
+
+  <!-- ================= RELACIONES Y COMPOSICIONES ================= -->
+  <g stroke="#334155" stroke-width="1.4" fill="none">
+    <!-- Usuario 1 *-- 0..* Inmueble -->
+    <line x1="295" y1="195" x2="295" y2="250" marker-start="url(#comp-diamond)"/>
+    <!-- Inmueble 1 *-- 0..* Lectura -->
+    <line x1="295" y1="460" x2="295" y2="520" marker-start="url(#comp-diamond)"/>
+    <!-- Inmueble 1 *-- 0..* UmbralServicio -->
+    <path d="M 440 420 L 495 420 L 495 612 L 560 612" marker-start="url(#comp-diamond)"/>
+    <!-- Lectura 1 *-- 0..1 Alerta -->
+    <path d="M 225 765 L 225 845" marker-start="url(#comp-diamond)"/>
+  </g>
+
+  <!-- Cardinalidades y Etiquetas de Composición -->
+  <g font-size="10.5" fill="#334155">
+    <text x="305" y="210">1</text>
+    <text x="305" y="242">0..*</text>
+    <rect x="242" y="213" width="106" height="16" rx="2" fill="#ffffff"/>
+    <text x="295" y="225" text-anchor="middle">posee (cascade)</text>
+
+    <text x="305" y="476">1</text>
+    <text x="305" y="512">0..*</text>
+    <rect x="236" y="482" width="118" height="16" rx="2" fill="#ffffff"/>
+    <text x="295" y="494" text-anchor="middle">registra (cascade)</text>
+
+    <text x="452" y="414">1</text>
+    <text x="536" y="606">0..*</text>
+    <rect x="435" y="520" width="120" height="16" rx="2" fill="#ffffff"/>
+    <text x="495" y="532" text-anchor="middle">personaliza (cascade)</text>
+
+    <text x="234" y="782">1</text>
+    <text x="234" y="838">0..1</text>
+    <rect x="172" y="796" width="106" height="16" rx="2" fill="#ffffff"/>
+    <text x="225" y="808" text-anchor="middle">genera (cascade)</text>
+  </g>
+
+  <!-- ================= DEPENDENCIAS PUNTEADAS ================= -->
+  <g stroke="#475569" stroke-width="1.3" stroke-dasharray="5,4" fill="none" marker-end="url(#dep-arrow)">
+    <!-- Lectura ..> ServicioEnum -->
+    <path d="M 380 765 L 415 805"/>
+    <!-- UmbralServicio ..> ServicioEnum -->
+    <path d="M 615 685 L 555 775"/>
+    <!-- Alerta ..> TipoAlertaEnum -->
+    <line x1="112" y1="1050" x2="112" y2="1110"/>
+    <!-- Alerta ..> EstadoAlertaEnum -->
+    <line x1="275" y1="1050" x2="275" y2="1110"/>
+    <!-- Alerta ..> ResultadoEvaluacion -->
+    <line x1="325" y1="955" x2="650" y2="955"/>
+    <!-- DetectorAnomalias ..> DetectorConfig -->
+    <line x1="750" y1="220" x2="750" y2="160"/>
+    <!-- DetectorAnomalias ..> Lectura -->
+    <path d="M 560 365 L 470 365 L 470 555 L 440 555"/>
+    <!-- DetectorAnomalias ..> UmbralServicio -->
+    <line x1="720" y1="465" x2="720" y2="540"/>
+    <!-- DetectorAnomalias ..> ResultadoEvaluacion -->
+    <line x1="905" y1="465" x2="905" y2="815"/>
+    <!-- ResultadoEvaluacion ..> EstadoEvaluacion -->
+    <line x1="820" y1="1090" x2="820" y2="1110"/>
+  </g>
+
+  <!-- Etiquetas de dependencias -->
+  <g font-size="10.5" fill="#475569" text-anchor="middle">
+    <text x="415" y="775">clasifica</text>
+    <text x="605" y="742">aplica a</text>
+    <text x="84" y="1085">tipifica</text>
+    <text x="315" y="1085">registra estado</text>
+    <rect x="445" y="945" width="90" height="16" rx="2" fill="#ffffff"/>
+    <text x="490" y="957">se origina de</text>
+    <rect x="705" y="182" width="90" height="16" rx="2" fill="#ffffff"/>
+    <text x="750" y="194">lee parámetros</text>
+    <rect x="422" y="458" width="96" height="16" rx="2" fill="#ffffff"/>
+    <text x="470" y="470">evalúa historial</text>
+    <rect x="672" y="495" width="96" height="16" rx="2" fill="#ffffff"/>
+    <text x="720" y="507">consulta umbral</text>
+    <rect x="875" y="640" width="60" height="16" rx="2" fill="#ffffff"/>
+    <text x="905" y="652">produce</text>
+  </g>
+</svg>
