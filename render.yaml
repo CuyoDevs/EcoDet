@@ -1,0 +1,43 @@
+services:
+  # -------------------------------------------------------------
+  # Backend API - FastAPI (Python)
+  # -------------------------------------------------------------
+  - type: web
+    name: ecodet-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python seed.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 1440
+      - key: CORS_ORIGINS
+        value: "http://localhost:5173,http://127.0.0.1:5173"
+      - key: PYTHON_VERSION
+        value: 3.11.8
+
+  # -------------------------------------------------------------
+  # Frontend Web - React + Vite SPA
+  # -------------------------------------------------------------
+  - type: web
+    name: ecodet-frontend
+    runtime: static
+    rootDir: frontend
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: ecodet-backend
+          property: host

@@ -2,7 +2,8 @@ import { tokenStorage } from '../auth/tokenStorage'
 
 // En desarrollo se deja vacío: Vite reenvía /api al backend (vite.config.js).
 // Para apuntar a otro servidor: VITE_API_URL=http://host:puerto en frontend/.env
-export const API_BASE = import.meta.env?.VITE_API_URL ?? ''
+const rawApiUrl = import.meta.env?.VITE_API_URL ?? ''
+export const API_BASE = rawApiUrl && !rawApiUrl.startsWith('http') ? `https://${rawApiUrl}` : rawApiUrl
 
 const MENSAJE_SIN_CONEXION = 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.'
 
