@@ -3,99 +3,34 @@
 
 **Cátedra:** Taller de Tecnología Aplicada (EGI)  
 **Proyecto:** EcoDet — Detector de anomalías en consumo del hogar  
-**Versión:** 2.0 (Refinada tras Sprint 2)  
-**Insumo:** Product Backlog completo (HU-01 a HU-21) y Reglas de Negocio (RN-01 a RN-17)
+**Versión:** 2.1 (Sincronizada con el código y el catálogo oficial de reglas de negocio)  
+**Insumo:** Product Backlog completo (HU-01 a HU-21) y Reglas de Negocio (`docs/producto/03-documentacion-de-apoyo.md`)
 
 ---
 
-## 1. Diagrama General de Casos de Uso (Mermaid)
+## 1. Diagrama General de Casos de Uso (UML)
 
-```mermaid
-flowchart LR
-    subgraph Actores
-        V["👤 Visitante"]
-        U["👤 Usuario Autenticado"]
-        S["⚙️ Motor del Sistema"]
-    end
-
-    subgraph CasosDeUso["Casos de Uso del Sistema EcoDet (MVP)"]
-        %% Autenticación y Cuentas
-        CU01(["CU-01 Registrarse (HU-02)"])
-        CU02(["CU-02 Iniciar sesión (HU-03)"])
-        CU03(["CU-03 Cerrar sesión (HU-04)"])
-        CU04(["CU-04 Consultar mi perfil (HU-04)"])
-
-        %% Gestión de Inmuebles
-        CU05(["CU-05 Gestionar inmuebles (Alta / Edición / Eliminación) (HU-05, HU-06, HU-07)"])
-
-        %% Carga de Consumos
-        CU06(["CU-06 Cargar lectura individual (HU-08)"])
-        CU07(["CU-07 Cargar facturas en lote histórico (HU-09)"])
-        CU08(["CU-08 Editar o eliminar lectura existente (HU-11)"])
-        CU09(["CU-09 Cargar datos demo de ejemplo (HU-19)"])
-
-        %% Detección y Estadísticas
-        CU10(["CU-10 Evaluar consumo y detectar anomalías (HU-12)"])
-        CU11(["CU-11 Visualizar estado de aprendizaje y progreso (HU-14)"])
-        CU12(["CU-12 Consultar historial y franja habitual (HU-10, HU-21)"])
-
-        %% Alertas y Umbrales
-        CU13(["CU-13 Gestionar panel de alertas (HU-15)"])
-        CU14(["CU-14 Marcar alerta como normal (HU-16)"])
-        CU15(["CU-15 Confirmar alerta como anómala (HU-17)"])
-        CU16(["CU-16 Ajustar sensibilidad de umbrales (HU-18)"])
-    end
-
-    %% Relaciones de Visitante
-    V --> CU01
-    V --> CU02
-
-    %% Relaciones de Usuario
-    U --> CU03
-    U --> CU04
-    U --> CU05
-    U --> CU06
-    U --> CU07
-    U --> CU08
-    U --> CU09
-    U --> CU11
-    U --> CU12
-    U --> CU13
-    U --> CU16
-
-    %% Dependencias Include y Extend
-    CU06 -.->|«include»| CU10
-    CU07 -.->|«include»| CU10
-    CU08 -.->|«include»| CU10
-    CU09 -.->|«include»| CU10
-
-    CU14 -.->|«extend»| CU13
-    CU15 -.->|«extend»| CU13
-    CU11 -.->|«include»| CU12
-
-    %% Actor Sistema
-    S --> CU10
-```
+![Diagrama de Casos de Uso Refinado · EcoDet](./casos-de-uso.svg)
 
 ---
 
 ## 2. Descripción Detallada de Casos de Uso Refinados
 
-| ID | Caso de Uso | Actor Principal | Historias Asociadas | Descripción y Reglas de Negocio |
-| :--- | :--- | :--- | :--- | :--- |
-| **CU-01** | Registrarse | Visitante | HU-02 (DET-10) | Permite crear una cuenta nueva con nombre, correo único y contraseña cifrada con `bcrypt` (RN-01, RN-15). |
-| **CU-02** | Iniciar sesión | Visitante | HU-03 (DET-11) | Valida credenciales y emite un token JWT con expiración configurable (RN-15). |
-| **CU-03** | Cerrar sesión | Usuario | HU-04 (DET-12) | Revoca el token en el cliente y redirige a la pantalla pública de bienvenida. |
-| **CU-04** | Consultar perfil | Usuario | HU-04 (DET-12) | Obtiene los datos del usuario logueado mediante `GET /api/auth/me`. |
-| **CU-05** | Gestionar inmuebles | Usuario | HU-05, HU-06, HU-07 (DET-13, 14, 15) | Alta, edición de nombre/dirección y **eliminación con borrado en cascada** de lecturas y alertas vinculadas. |
-| **CU-06** | Cargar lectura individual | Usuario | HU-08 (DET-16) | Registra una lectura con fecha de inicio, fin y consumo en unidad física (kWh/m³). Prorratea el consumo por día (RN-02, RN-03). Dispara CU-10. |
-| **CU-07** | Carga histórica en lote | Usuario | HU-09 (DET-17) | Permite ingresar múltiples facturas pasadas en una sola operación atómica (todo-o-nada). Dispara CU-10. |
-| **CU-08** | Editar o eliminar lectura | Usuario | HU-11 (DET-19) | Modifica fechas/consumo o suprime una lectura. Reevalúa inmediatamente la alerta asociada (RN-17). Dispara CU-10. |
-| **CU-09** | Cargar datos demo | Usuario | HU-19 (DET-27) | Pobla el inmueble con facturas de prueba y curvas estacionales para evaluación del sistema. |
-| **CU-10** | Detectar anomalías | Sistema | HU-12, HU-13 (DET-20, 21) | Motor estadístico: verifica si hay $\ge 6$ lecturas (RN-07), calcula estacionalidad (RN-08), límites $\mu \pm (k \times \sigma)$ (RN-09/10), aplica piso del 10% (RN-12) y emite alertas ALTA/BAJA en estado PENDIENTE. |
-| **CU-11** | Ver estado de aprendizaje | Usuario | HU-14 (DET-22) | Muestra si el detector está aprendiendo ($< 6$ lecturas), indicando exactamente cuántas facturas faltan mediante barra de progreso interactiva. |
-| **CU-12** | Consultar historial y franja | Usuario | HU-10, HU-21 (DET-18, 29) | Gráficos Chart.js interactivos por servicio con tooltips y sombreado de la franja de consumo habitual entre límite inferior y superior. |
-| **CU-13** | Gestionar panel de alertas | Usuario | HU-15 (DET-23) | Muestra la lista de alertas pendientes/resueltas con filtros por servicio y estado, indicando el desvío porcentual. |
-| **CU-14** | Marcar alerta como normal | Usuario | HU-16 (DET-24) | El usuario indica que el consumo atípico tuvo causa justificada. Cambia estado a `NORMAL` y se **excluye de cálculos futuros** (RN-11). |
-| **CU-15** | Confirmar alerta | Usuario | HU-17 (DET-25) | El usuario confirma que la anomalía fue una pérdida o fuga real. Cambia estado a `CONFIRMADA`. |
-| **CU-16** | Ajustar sensibilidad | Usuario | HU-18 (DET-26) | Permite modificar el umbral $k$ de desvíos estándar (entre 1.0 y 3.0) de forma independiente por inmueble y servicio. |
+| ID | Caso de Uso | Actor Principal | Historias Asociadas | CU oficial | Descripción y Reglas de Negocio |
+| :--- | :--- | :--- | :--- | :---: | :--- |
+| **CU-01** | Registrarse | Visitante | HU-02 (DET-10) | CU-01 | Crea una cuenta con nombre, correo único y contraseña de al menos 8 caracteres con letras y números, guardada con hash `bcrypt` (RN-15). La cuenta nueva no ve datos de otros usuarios (RN-01). |
+| **CU-02** | Iniciar sesión | Visitante | HU-03 (DET-11) | CU-02 | Valida credenciales y emite un token JWT. Ante credenciales incorrectas responde con un error genérico (RN-01, RN-19). |
+| **CU-03** | Cerrar sesión | Usuario | HU-04 (DET-12) | CU-10 | Elimina el token en el cliente y vuelve a la pantalla de acceso. |
+| **CU-04** | Consultar perfil | Usuario | HU-03 (DET-38) | — | Obtiene los datos del usuario autenticado mediante `GET /api/auth/me`. Es soporte técnico de CU-02. |
+| **CU-05** | Gestionar inmuebles | Usuario | HU-05, HU-06, HU-07 (DET-13, 14, 15) | CU-03 | Alta, edición de nombre y dirección, y eliminación con confirmación. Eliminar un inmueble borra sus lecturas, alertas y umbrales (RN-18). |
+| **CU-06** | Cargar lectura individual | Usuario | HU-08 (DET-16) | CU-04 | Registra una lectura con fecha de inicio, fecha de fin y consumo físico (kWh o m³). Valida fechas (RN-03), valor >= 0 (RN-05), unidad física (RN-02) y ausencia de superposición (RN-14). Calcula el consumo por día (RN-06) y dispara CU-10. |
+| **CU-07** | Carga histórica en lote | Usuario | HU-09 (DET-17) | CU-04 (lote) | Ingresa varias facturas pasadas en una sola operación atómica (todo o nada), validando también la superposición dentro del lote (RN-14). Dispara CU-10. |
+| **CU-08** | Editar o eliminar lectura | Usuario | HU-11 (DET-19) | CU-09 | Modifica o elimina una lectura con las mismas validaciones que la carga. La lectura editada se vuelve a evaluar y su alerta se reemplaza; las alertas de otras lecturas no se recalculan (RN-17). |
+| **CU-09** | Cargar datos de ejemplo | Usuario | HU-19 (DET-27) | CU-08 | Crea un inmueble de demostración con 24 meses de luz y gas y 12 de agua, con 2 anomalías altas y 1 baja por servicio. Solo se permite uno por usuario (RN-16). |
+| **CU-10** | Evaluar consumo y detectar anomalías | Sistema | HU-12, HU-13 (DET-20, 21) | CU-06 | Motor estadístico: exige 6 lecturas por servicio (RN-07), elige referencia estacional o general (RN-08), calcula límites promedio ± umbral × desvío efectivo (RN-09, RN-12), clasifica en alta o baja (RN-10, RN-20) y genera la alerta en estado Pendiente (RN-13). |
+| **CU-11** | Ver estado de aprendizaje | Usuario | HU-14 (DET-22) | CU-06 / CU-04 | Con menos de 6 lecturas no se generan alertas: se muestra "aún estamos aprendiendo tu patrón", cuántas lecturas faltan y una barra de progreso (RN-07). |
+| **CU-12** | Consultar historial y franja habitual | Usuario | HU-10, HU-21 (DET-18, 29) | CU-05 | Gráfico por servicio con detalle al seleccionar un punto. Resalta las lecturas con alerta. Permite mostrar u ocultar la franja habitual cuando el detector está activo. |
+| **CU-13** | Ver mis alertas y su detalle | Usuario | HU-15 (DET-23) | CU-07 | Lista las alertas de un inmueble con servicio, período, tipo, desvío y estado, con filtros por servicio y estado. |
+| **CU-14** | Marcar alerta como normal | Usuario | HU-16 (DET-24) | CU-07 | Pide confirmación y cambia el estado a `NORMAL`. La lectura queda fuera del promedio y del desvío en las detecciones siguientes (RN-11, RN-13, RN-17). |
+| **CU-15** | Confirmar alerta | Usuario | HU-17 (DET-25) | CU-07 | Cambia el estado a `CONFIRMADA`: deja registrado que el usuario ya la revisó. No modifica el cálculo del detector (RN-13). |
+| **CU-16** | Ajustar sensibilidad | Usuario | HU-18 (DET-26) | CU-07 | Permite cambiar el umbral (cantidad de desvíos) de cada servicio y cada inmueble. Acepta cualquier número mayor que cero; el valor inicial es 2. Aplica solo a detecciones futuras (RN-09, RN-17). |

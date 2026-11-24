@@ -8,8 +8,14 @@ Proyecto del Taller de Tecnología Aplicada (implementación de Scrum con Jira).
 
 ## 🔗 Enlaces y Documentación
 
+- **Aplicación en Producción (Render):** [https://ecodet-1.onrender.com](https://ecodet-1.onrender.com) (`demo@ecodet.com` / `Password123`)
+- **API Backend & Swagger UI:** [https://ecodet.onrender.com/docs](https://ecodet.onrender.com/docs)
 - **Repositorio:** [https://github.com/CuyoDevs/EcoDet](https://github.com/CuyoDevs/EcoDet)
 - **Tablero de Jira:** [https://mateolujan13.atlassian.net/jira/software/projects/DET/boards/2](https://mateolujan13.atlassian.net/jira/software/projects/DET/boards/2)
+- **Entrega Final EGI (Documentos Oficiales):**
+  - [1 · Bitácora de Sprints 1 y 2](docs/1-Bitacora-de-Sprints.md) ([PDF](docs/1-Bitacora-de-Sprints.pdf))
+  - [2 · Documentación de Análisis y Diseño](docs/2-Analisis-y-Diseno.md) ([PDF](docs/2-Analisis-y-Diseno.pdf))
+  - [3 · Documentación de Operación y Despliegue](docs/3-Operacion-y-Despliegue.md) ([PDF](docs/3-Operacion-y-Despliegue.pdf))
 - **Documentación del Producto:**
   - [01 · Definición del producto y MVP](docs/producto/01-definicion-del-producto.md)
   - [02 · Product Backlog y criterios de aceptación](docs/producto/02-product-backlog.md)
@@ -20,9 +26,9 @@ Proyecto del Taller de Tecnología Aplicada (implementación de Scrum con Jira).
   - [Diagrama de Casos de Uso](docs/diseno/diagramas/casos-de-uso.md)
   - [Diagrama de Clases del Dominio](docs/diseno/diagramas/clases-dominio.md)
   - [Modelo de Datos Relacional](docs/diseno/diagramas/modelo-datos.md)
-- **Gestión del Sprint:**
-  - [Planificación del Sprint 1 (Sprint Planning)](docs/sprints/sprint-1/planificacion.md)
-  - [Sprint Backlog del Sprint 1](docs/sprints/sprint-1/sprint-backlog.md)
+- **Gestión de Sprints:**
+  - [Sprint 1 · Planificación](docs/sprints/sprint-1/planificacion.md) · [Sprint Backlog](docs/sprints/sprint-1/sprint-backlog.md)
+  - [Sprint 2 · Sprint Backlog](docs/sprints/sprint-2/sprint-backlog.md) · [Pruebas con Usuarios (HU-20)](docs/sprints/sprint-2/HU-20_markdown/HU-20_registro_pruebas_usuarios.md)
 
 ---
 
@@ -30,20 +36,17 @@ Proyecto del Taller de Tecnología Aplicada (implementación de Scrum con Jira).
 
 | Rol | Integrante |
 | :--- | :--- |
-| **Product Owner** | Mateo |
+| **Product Owner** | Mateo Luján |
 | **Scrum Master** | Ari |
 | **Equipo de desarrollo** | Josue, Gimena, Ari, Angel, William, Lisandro y Mateo |
-- Repositorio: https://github.com/CuyoDevs/EcoDet
-- Tablero de Jira: https://mateolujan13.atlassian.net/jira/software/projects/DET/boards/2
-- Documentos del producto: Ver documentación en el repositorio (Objetivo del producto, Product Backlog, Documentación de apoyo)
 
 ---
 
 ## 📅 Calendario
 
 - **Sprint 1:** 19/10/2026 al 02/11/2026
-- **Sprint 2:** 02/11/2026 al 16/11/2026
-- **Presentación final:** 30/11/2026
+- **Sprint 2:** 02/11/2026 al 16/11/2026 (cierre y despliegue: 24/11/2026)
+- **Presentación final (EGI):** Miércoles 25/11/2026
 
 ---
 

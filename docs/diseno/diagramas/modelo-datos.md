@@ -9,7 +9,7 @@
 erDiagram
     USUARIOS ||--o{ INMUEBLES : posee
     INMUEBLES ||--o{ LECTURAS : registra
-    INMUEBLES ||--o{ UMBRALES : personaliza
+    INMUEBLES ||--o{ UMBRALES_SERVICIO : personaliza
     LECTURAS ||--o| ALERTAS : produce
 
     USUARIOS {
@@ -24,8 +24,9 @@ erDiagram
         int id PK
         int usuario_id FK "Cascade delete"
         string nombre "Único por usuario"
-        string direccion
+        string direccion "Nullable"
         boolean es_demo
+        datetime fecha_creacion
     }
 
     LECTURAS {
@@ -38,11 +39,11 @@ erDiagram
         datetime fecha_creacion
     }
 
-    UMBRALES {
+    UMBRALES_SERVICIO {
         int id PK
         int inmueble_id FK "Cascade delete"
         string servicio "LUZ, GAS, AGUA"
-        float valor_desvios "> 0"
+        float desvios "> 0, default 2.0"
     }
 
     ALERTAS {
