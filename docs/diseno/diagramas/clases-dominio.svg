@@ -212,15 +212,15 @@
     </g>
   </g>
 
-  <!-- ================= RELACIONES Y COMPOSICIONES ================= -->
+  <!-- RELACIONES Y COMPOSICIONES -->
   <g stroke="#334155" stroke-width="1.4" fill="none">
-    <!-- Usuario 1 *-- 0..* Inmueble -->
+    <!-- Usuario 1 posee 0..* Inmueble -->
     <line x1="295" y1="195" x2="295" y2="250" marker-start="url(#comp-diamond)"/>
-    <!-- Inmueble 1 *-- 0..* Lectura -->
+    <!-- Inmueble 1 registra 0..* Lectura -->
     <line x1="295" y1="460" x2="295" y2="520" marker-start="url(#comp-diamond)"/>
-    <!-- Inmueble 1 *-- 0..* UmbralServicio -->
+    <!-- Inmueble 1 personaliza 0..* UmbralServicio -->
     <path d="M 440 420 L 495 420 L 495 612 L 560 612" marker-start="url(#comp-diamond)"/>
-    <!-- Lectura 1 *-- 0..1 Alerta -->
+    <!-- Lectura 1 genera 0..1 Alerta -->
     <path d="M 225 765 L 225 845" marker-start="url(#comp-diamond)"/>
   </g>
 
