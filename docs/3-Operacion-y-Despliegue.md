@@ -172,8 +172,6 @@ Referencia: el valor inicial es **2** desvíos. Un umbral mayor genera menos ale
 
 ---
 
----
-
 # PARTE 2 · Documentación de Instalación Local
 
 ## 2.1. Requisitos Previos
@@ -306,8 +304,6 @@ cd frontend
 npm run build
 # Resultado esperado: Build exitoso con archivos en dist/
 ```
-
----
 
 ---
 
