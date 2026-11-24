@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>EcoDet - Documentación de Operación y Despliegue (EGI)</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.0/github-markdown.min.css">
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 15mm 20mm 15mm;
+    }
+    body {
+      margin: 0;
+      padding: 30px;
+      background-color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      color: #1f2328;
+    }
+    .markdown-body {
+      max-width: 900px;
+      margin: 0 auto;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+    table {
+      width: 100% !important;
+      border-collapse: collapse;
+      margin: 16px 0;
+      display: table !important;
+      font-size: 12.5px;
+    }
+    th, td {
+      border: 1px solid #d0d7de !important;
+      padding: 7px 10px !important;
+      text-align: left;
+    }
+    th {
+      background-color: #f6f8fa !important;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #fcfcfc;
+    }
+    pre {
+      background-color: #f6f8fa;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+      overflow-x: auto;
+    }
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      font-size: 12px;
+    }
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      margin: 24px 0;
+      background: #fafafa;
+      padding: 16px;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+    }
+    .mermaid svg {
+      max-width: 100%;
+      height: auto;
+    }
+    h1 {
+      border-bottom: 2px solid #0969da;
+      padding-bottom: 8px;
+      color: #0969da;
+    }
+    h2 {
+      border-bottom: 1px solid #d0d7de;
+      padding-bottom: 6px;
+      margin-top: 28px;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .markdown-body {
+        max-width: 100%;
+      }
+      table, pre, blockquote, .mermaid {
+        page-break-inside: avoid;
+      }
+      h1, h2, h3 {
+        page-break-after: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <article class="markdown-body" id="content"></article>
+
+  <script>
+    const markdownText = "# EcoDet · Documentación de Operación y Despliegue\n## Taller de Tecnología Aplicada (EGI) · Manual de Usuario e Instalación\n\n**Cátedra:** Taller de Tecnología Aplicada (EGI)  \n**Proyecto:** EcoDet — Detector de anomalías en consumo del hogar (Luz, Gas y Agua)  \n**Equipo:** CuyoDevs  \n**Fecha de Presentación:** Miércoles 25/11/2026  \n**Repositorio GitHub:** [https://github.com/CuyoDevs/EcoDet](https://github.com/CuyoDevs/EcoDet)\n\n---\n\n# PARTE 1 · Manual de Usuario\n\n## 1.1. Acceso al Sistema (Producción en la Nube)\n\nLa aplicación está disponible públicamente en:\n\n| Recurso | URL |\n| :--- | :--- |\n| **Frontend (Aplicación Web)** | https://ecodet-1.onrender.com |\n| **Backend API** | https://ecodet.onrender.com |\n| **Documentación Swagger** | https://ecodet.onrender.com/docs |\n| **Health Check** | https://ecodet.onrender.com/api/health |\n\n> **Nota:** Los servidores de Render en plan gratuito entran en modo *sleep* tras 15 minutos de inactividad. El primer request puede tardar entre 30 y 45 segundos mientras el servidor se reactiva.\n\n### Credenciales de Demostración\n\n| Campo | Valor |\n| :--- | :--- |\n| **Correo** | demo@ecodet.com |\n| **Contraseña** | Password123 |\n\nLa cuenta demo ya tiene cargados 3 inmuebles con historial de consumos que activan el motor estadístico del detector.\n\n---\n\n## 1.2. Registro y Acceso\n\n### Crear una cuenta nueva\n1. Ingresar a `https://ecodet-1.onrender.com`.\n2. Hacer clic en **\"Registrarse\"**.\n3. Completar: Nombre completo, Correo electrónico, Contraseña (mínimo 6 caracteres).\n4. Hacer clic en **\"Crear cuenta\"**.\n\n### Iniciar sesión\n1. Ingresar a la pantalla de inicio.\n2. Completar correo y contraseña.\n3. Hacer clic en **\"Ingresar\"**.\n4. Se redirige al **Panel Principal** con la lista de inmuebles.\n\n### Cerrar sesión\n- Hacer clic en el ícono de usuario en la esquina superior derecha y seleccionar **\"Cerrar sesión\"**.\n\n---\n\n## 1.3. Gestión de Inmuebles\n\nLos inmuebles son las propiedades donde se registran los consumos (casa, departamento, local comercial).\n\n### Agregar un inmueble\n1. En el Panel Principal, hacer clic en **\"Agregar inmueble\"** (botón verde).\n2. Completar nombre y dirección del inmueble.\n3. Confirmar con **\"Guardar\"**.\n\n### Editar un inmueble\n1. En la tarjeta del inmueble, hacer clic en el ícono de lápiz ✏️.\n2. Modificar nombre y/o dirección.\n3. Guardar los cambios.\n\n### Eliminar un inmueble\n1. En la tarjeta del inmueble, hacer clic en el ícono de papelera 🗑️.\n2. Confirmar la eliminación en el diálogo de confirmación.\n> **Atención:** Eliminar un inmueble borra permanentemente todas sus lecturas y alertas asociadas.\n\n---\n\n## 1.4. Carga de Lecturas de Consumo\n\nLas lecturas representan las facturas de servicios (Luz, Gas, Agua). Se registran en unidades físicas: **kWh** para Luz y **m³** para Gas y Agua (no en dinero).\n\n### Cargar una lectura individual\n1. Ingresar al inmueble haciendo clic en su tarjeta.\n2. Seleccionar la pestaña del servicio: **Luz**, **Gas** o **Agua**.\n3. Hacer clic en **\"Nueva lectura\"**.\n4. Completar:\n   - **Fecha de inicio** del período de la factura.\n   - **Fecha de fin** del período de la factura.\n   - **Consumo** en kWh o m³.\n5. Hacer clic en **\"Guardar\"**.\n\n> El sistema calculará automáticamente el consumo por día y ejecutará el motor estadístico. Si se detecta una anomalía, aparecerá una alerta inmediatamente.\n\n### Carga histórica en lote\nPara cargar varias facturas pasadas de una vez:\n1. Hacer clic en **\"Carga en lote\"**.\n2. Ingresar las facturas históricas en el formulario múltiple.\n3. Confirmar la operación (es **todo-o-nada**: si una falla, no se guarda ninguna).\n\n### Editar o eliminar una lectura\n1. En el historial del servicio, hacer clic sobre la lectura.\n2. Elegir **Editar** o **Eliminar**.\n3. Las alertas asociadas se **recalculan automáticamente**.\n\n---\n\n## 1.5. Historial y Gráficos\n\nDentro de cada servicio se muestra:\n- **Gráfico de líneas** (Chart.js) con los consumos diarios históricos.\n- **Franja sombreada** que representa la zona de consumo habitual (entre el límite inferior y superior calculado por el motor).\n- **Tooltips interactivos** al pasar el mouse sobre cada punto.\n\n### Estado \"Aprendiendo\"\nSi hay menos de **6 lecturas** cargadas para un servicio, el sistema muestra:\n- Un indicador de estado **\"Aprendiendo\"** con barra de progreso.\n- Cuántas lecturas adicionales faltan para activar el detector.\n\n---\n\n## 1.6. Panel de Alertas\n\nEl panel de alertas centraliza todas las anomalías detectadas.\n\n### Acceder al panel\n- Hacer clic en **\"Alertas\"** en el menú de navegación superior.\n\n### Tipos de alertas\n| Tipo | Significado |\n| :--- | :--- |\n| 🔴 **ALTA** | El consumo superó el límite superior habitual. Posible pérdida o uso excesivo. |\n| 🔵 **BAJA** | El consumo cayó por debajo del límite inferior. Lectura inusualmente baja. |\n\n### Estados de una alerta\n| Estado | Significado |\n| :--- | :--- |\n| **PENDIENTE** | La alerta fue detectada y está esperando revisión. |\n| **CONFIRMADA** | El usuario confirmó que fue una anomalía real (fuga, pérdida, etc.). |\n| **NORMAL** | El usuario indicó que el consumo atípico tuvo causa justificada (pileta, invitados, etc.). La lectura se excluye de los cálculos futuros. |\n\n### Acciones sobre alertas\n- **Filtrar:** Por servicio (Luz / Gas / Agua) y por estado.\n- **Marcar como normal:** Indica que el consumo fue excepcional pero justificado.\n- **Confirmar:** Valida que la anomalía representó un problema real.\n\n---\n\n## 1.7. Ajuste de Sensibilidad\n\nPermite personalizar qué tan estricto es el detector para cada servicio e inmueble.\n\n1. Ir a **\"Configuración\"** dentro del inmueble.\n2. Ajustar el valor de **k (desvíos estándar)** para cada servicio:\n   - **1.0** → Muy sensible (detecta variaciones pequeñas).\n   - **2.0** → Sensibilidad estándar (valor por defecto).\n   - **3.0** → Poco sensible (sólo detecta variaciones muy grandes).\n\n---\n\n---\n\n# PARTE 2 · Documentación de Instalación Local\n\n## 2.1. Requisitos Previos\n\n| Herramienta | Versión mínima | Verificar con |\n| :--- | :--- | :--- |\n| **Python** | 3.11+ | `python --version` |\n| **Node.js** | 18+ | `node --version` |\n| **npm** | 9+ | `npm --version` |\n| **Git** | Cualquier versión reciente | `git --version` |\n\n---\n\n## 2.2. Clonar el Repositorio\n\n```bash\ngit clone https://github.com/CuyoDevs/EcoDet.git\ncd EcoDet\n```\n\n---\n\n## 2.3. Configuración del Backend (FastAPI + Python)\n\n### Instalación de dependencias\n\n```bash\ncd backend\npython -m venv .venv\n\n# Windows (PowerShell)\n.venv\\Scripts\\Activate.ps1\n\n# Linux / macOS\nsource .venv/bin/activate\n\npip install -r requirements.txt\n```\n\n### Iniciar el servidor de desarrollo\n\n```bash\n# (desde la carpeta backend/, con el entorno virtual activo)\npython -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000\n```\n\nEl backend queda disponible en: `http://127.0.0.1:8000`  \nDocumentación Swagger local: `http://127.0.0.1:8000/docs`\n\n### Atajo rápido (Windows)\nDesde la raíz del proyecto:\n```powershell\n.\\run-backend.bat\n```\n\n---\n\n## 2.4. Configuración del Frontend (React + Vite)\n\n### Instalación de dependencias\n\n```bash\ncd frontend\nnpm install\n```\n\n### Iniciar el servidor de desarrollo\n\n```bash\nnpm run dev\n```\n\nEl frontend queda disponible en: `http://127.0.0.1:5173`\n\n### Atajo rápido (Windows)\nDesde la raíz del proyecto:\n```powershell\n.\\run-frontend.bat\n```\n\n---\n\n## 2.5. Cargar Datos de Demo (Opcional)\n\nPara poblar la base de datos local con datos de demostración:\n\n```bash\n# (desde la carpeta backend/, con el servidor corriendo)\npython seed.py\n```\n\nEsto crea el usuario `demo@ecodet.com` / `Password123` con 3 inmuebles y lecturas históricas que activan el motor estadístico.\n\n---\n\n## 2.6. Ejecutar Tests Automáticos\n\n### Backend (pytest)\n\n```bash\ncd backend\npython -m pytest -v\n# Resultado esperado: 294 passed\n```\n\n### Frontend (vitest)\n\n```bash\ncd frontend\nnpm run test\n# Resultado esperado: 230 passed en 22 test files\n```\n\n### Build de producción (verificación)\n\n```bash\ncd frontend\nnpm run build\n# Resultado esperado: Build exitoso con archivos en dist/\n```\n\n---\n\n---\n\n# PARTE 3 · Documentación de Despliegue en Producción (Render)\n\n## 3.1. Infraestructura Desplegada\n\n| Componente | Plataforma | URL | Estado |\n| :--- | :--- | :--- | :--- |\n| **Backend API** | Render (Web Service) | https://ecodet.onrender.com | ✅ Activo |\n| **Frontend SPA** | Render (Static Site) | https://ecodet-1.onrender.com | ✅ Activo |\n| **Base de Datos** | SQLite (incluida en el contenedor) | — | ✅ Conectada |\n\n---\n\n## 3.2. Blueprint de Render (render.yaml)\n\nEl archivo `render.yaml` en la raíz del repositorio define toda la infraestructura como código (IaC). Permite reproducir el despliegue completo con un solo clic desde el panel de Render.\n\n```yaml\n# render.yaml — Blueprint EcoDet\nservices:\n  - type: web\n    name: ecodet-backend\n    env: python\n    buildCommand: \"pip install -r backend/requirements.txt\"\n    startCommand: \"cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT\"\n    envVars:\n      - key: PYTHON_VERSION\n        value: \"3.11.0\"\n\n  - type: static\n    name: ecodet-frontend\n    buildCommand: \"cd frontend && npm install && npm run build\"\n    staticPublishPath: \"./frontend/dist\"\n    routes:\n      - type: rewrite\n        source: /*\n        destination: /index.html\n```\n\n---\n\n## 3.3. Configuraciones Clave de Producción\n\n### CORS (Backend)\nEl backend permite conexiones desde cualquier subdominio de Render para habilitar la comunicación entre frontend y backend desplegados en servicios separados:\n\n```python\n# backend/app/main.py\napp.add_middleware(\n    CORSMiddleware,\n    allow_origin_regex=r\"^https:\\/\\/.*\\.onrender\\.com$\",\n    allow_credentials=True,\n    allow_methods=[\"*\"],\n    allow_headers=[\"*\"],\n)\n```\n\n### Auto-detección de entorno (Frontend)\nEl frontend detecta automáticamente si está en producción o desarrollo y conecta al backend correspondiente:\n\n```javascript\n// frontend/src/api/client.js\nconst isProduction = window.location.hostname !== 'localhost'\n  && window.location.hostname !== '127.0.0.1';\n\nconst BASE_URL = isProduction\n  ? 'https://ecodet.onrender.com'\n  : 'http://127.0.0.1:8000';\n```\n\n---\n\n## 3.4. Proceso de Despliegue\n\n### Primer despliegue\n1. Hacer fork o tener acceso al repositorio `CuyoDevs/EcoDet` en GitHub.\n2. Ir a [render.com](https://render.com) → **New Blueprint**.\n3. Conectar el repositorio de GitHub.\n4. Render detecta el archivo `render.yaml` automáticamente y crea ambos servicios.\n5. Esperar la finalización del build (aprox. 3-5 minutos).\n\n### Actualizaciones continuas\nCada push a la rama `main` del repositorio dispara automáticamente el re-despliegue de ambos servicios en Render (CI/CD integrado).\n\n### Inicialización de datos en producción\nEl script `seed.py` se ejecuta vía API tras el despliegue inicial para crear los datos demo:\n\n```bash\n# Ejecutar seed remotamente (requiere que el servidor esté activo)\ncurl -X POST https://ecodet.onrender.com/api/seed\n```\n\n---\n\n## 3.5. Verificación del Despliegue\n\n| Verificación | Comando / URL | Resultado esperado |\n| :--- | :--- | :--- |\n| Health check del backend | `GET https://ecodet.onrender.com/api/health` | `{\"status\": \"ok\", \"db\": \"connected\"}` |\n| Acceso al frontend | `https://ecodet-1.onrender.com` | Pantalla de bienvenida de EcoDet |\n| Login con demo | Credenciales demo → Panel principal | 3 inmuebles con historial cargado |\n| Swagger UI | `https://ecodet.onrender.com/docs` | Documentación interactiva de la API |\n\n---\n\n## 3.6. Stack Tecnológico\n\n| Capa | Tecnología | Versión |\n| :--- | :--- | :--- |\n| **Backend** | Python + FastAPI | Python 3.11 / FastAPI 0.100+ |\n| **ORM** | SQLAlchemy | 2.0 |\n| **Base de datos** | SQLite | 3.x |\n| **Validación** | Pydantic | V2 |\n| **Autenticación** | JWT + bcrypt | python-jose / bcrypt 4.x |\n| **Frontend** | React | 18 |\n| **Build tool** | Vite | 5.x |\n| **Estilos** | Tailwind CSS | 3.x |\n| **Gráficos** | Chart.js | 4.x |\n| **Testing Backend** | pytest | 7.x |\n| **Testing Frontend** | Vitest | 1.x |\n| **Despliegue** | Render (IaC Blueprint) | — |\n";
+    const contentEl = document.getElementById('content');
+    contentEl.innerHTML = marked.parse(markdownText);
+
+    // Convertir bloques de código mermaid a div.mermaid
+    document.querySelectorAll('pre code.language-mermaid').forEach(el => {
+      const pre = el.parentElement;
+      const div = document.createElement('div');
+      div.className = 'mermaid';
+      div.textContent = el.textContent;
+      pre.replaceWith(div);
+    });
+
+    // Renderizar mermaid
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+    mermaid.run();
+
+    // Renderizar KaTeX
+    if (window.renderMathInElement) {
+      renderMathInElement(contentEl, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false }
+        ],
+        throwOnError: false
+      });
+    }
+  </script>
+</body>
+</html>
