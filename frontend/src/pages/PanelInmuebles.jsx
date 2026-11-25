@@ -355,7 +355,7 @@ export default function PanelInmuebles() {
             Cargando tus inmuebles…
           </p>
         ) : inmuebles.length === 0 ? (
-          !mostrandoFormulario && <PanelVacio />
+          !mostrandoFormulario && <PanelVacio onCrearNuevo={abrirOCerrarFormulario} />
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {inmuebles.map((inm) => {

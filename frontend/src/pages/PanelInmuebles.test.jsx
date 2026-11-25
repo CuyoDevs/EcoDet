@@ -37,7 +37,9 @@ async function montar(inicial = []) {
   return user
 }
 
-const abrirFormulario = (user) => user.click(screen.getByRole('button', { name: /nuevo inmueble/i }))
+// El encabezado y el panel vacío ofrecen "Nuevo inmueble"; el primero del DOM es el del encabezado.
+const abrirFormulario = (user) =>
+  user.click(screen.getAllByRole('button', { name: /nuevo inmueble/i })[0])
 const guardar = (user) => user.click(screen.getByRole('button', { name: /guardar/i }))
 
 beforeEach(() => {
@@ -422,7 +424,7 @@ describe('PanelInmuebles · datos de ejemplo (HU-19 / DET-27)', () => {
     await montar([])
 
     expect(await screen.findByRole('button', { name: 'Cargar datos de ejemplo' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /nuevo inmueble/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /nuevo inmueble/i }).length).toBeGreaterThan(0)
   })
 
   it('crea el inmueble de demostración, avisa y lo agrega a la lista con sus alertas', async () => {

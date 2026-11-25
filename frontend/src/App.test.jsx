@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 import App from './App'
@@ -30,7 +30,12 @@ describe('Flujo completo de HU-02', () => {
     // Panel vacío (W2) con invitación a crear el primer inmueble
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Mis inmuebles' })).toBeInTheDocument())
     expect(screen.getByText(/todavía no tienes ningún inmueble/i)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /nuevo inmueble/i })).toBeInTheDocument()
+
+    // El botón junto al mensaje de bienvenida abre el formulario de alta (antes era un enlace
+    // a una ruta inexistente y el clic no hacía nada).
+    const bienvenida = screen.getByRole('heading', { name: /te damos la bienvenida/i }).closest('section')
+    await user.click(within(bienvenida).getByRole('button', { name: /nuevo inmueble/i }))
+    expect(await screen.findByLabelText(/nombre del inmueble/i)).toBeInTheDocument()
 
     // Al cerrar sesión se vuelve a la vista de acceso
     await user.click(screen.getByRole('button', { name: /cerrar sesión/i }))
